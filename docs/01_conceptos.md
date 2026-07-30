@@ -41,7 +41,7 @@ Referencia: [doi:10.1002/2014JE004627](https://doi.org/10.1002/2014JE004627)
 
 ## 1.4 Browse products
 
-Los **browse products** son imágenes RGB formadas por tres índices temáticos estirados a 8 bits. Permiten evaluar rápidamente la diversidad mineralógica de una escena.
+Los browse products son imágenes RGB formadas por tres índices temáticos estirados a 8 bits. Sirven para evaluar de un vistazo la diversidad mineralógica de una escena.
 
 | Código | Tema | Canales RGB |
 |--------|------|-------------|

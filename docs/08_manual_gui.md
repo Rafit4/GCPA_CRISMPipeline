@@ -1,7 +1,7 @@
 # 8. Manual de la interfaz gráfica (GUI)
 
-Interfaz del **CRISM Pipeline** para el **GCPA** (Grupo de investigación en Ciencias Planetarias y Astrobiología).  
-Hace lo mismo que los comandos de terminal, sin reemplazarlos.
+Interfaz del CRISM Pipeline desarrollada para el GCPA (Grupo de investigación en Ciencias Planetarias y Astrobiología).  
+Cubre las mismas operaciones que los comandos de terminal, sin sustituirlos.
 
 ## 8.1 Cómo abrirla
 
@@ -115,7 +115,7 @@ Se eligió **CustomTkinter** (sobre tkinter):
 | Opción | Pros | Contras |
 |--------|------|---------|
 | **CustomTkinter** (elegida) | Aspecto moderno, nativa, fácil progreso, poco peso | Dependencia extra (`customtkinter`, `Pillow`) |
-| tkinter puro | Ya viene con Python | Aspecto “rígido” / antiguo |
+| tkinter puro | Ya viene con Python | Aspecto anticuado |
 | PyQt / PySide | Muy pulido | Más pesado; licencias |
 | Streamlit / Gradio | Rápido de prototipar | Navegador; menos cómodo para descargas largas locales |
 
@@ -126,7 +126,7 @@ Se eligió **CustomTkinter** (sobre tkinter):
 | `No module named 'crism_pipeline'` | Activa el venv y/o ` $env:PYTHONPATH='src'` |
 | `No module named 'customtkinter'` | `.venv\Scripts\pip install customtkinter pillow` |
 | Descarga incompleta / `retrieval incomplete` | Relanzar la descarga; reanuda el archivo |
-| GUI “ocupada” | Espera a que termine la tarea actual |
+| La GUI no responde durante una tarea | Espera a que termine la tarea actual |
 
 ## 8.9 Créditos
 

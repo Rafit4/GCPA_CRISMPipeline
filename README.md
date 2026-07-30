@@ -1,8 +1,8 @@
 # Pipeline CRISM MTRDR SR
 
-Pipeline en Python para descargar, procesar y analizar productos **CRISM MTRDR SR** (Refined Spectral Summary Parameters) usando los **60 índices espectrales de Viviano-Beck et al. (2014)**.
+Pipeline en Python para descargar, procesar y analizar productos CRISM MTRDR SR (Refined Spectral Summary Parameters) a partir de los 60 índices espectrales de Viviano-Beck et al. (2014).
 
-Desarrollado en el contexto del **GCPA** (Grupo de investigación en Ciencias Planetarias y Astrobiología).
+Desarrollado en el Grupo de investigación en Ciencias Planetarias y Astrobiología (GCPA).
 
 ## Objetivos del pipeline
 
@@ -24,8 +24,8 @@ Desarrollado en el contexto del **GCPA** (Grupo de investigación en Ciencias Pl
 Instalación rápida (Windows, con Python ≥ 3.10 ya instalado):
 
 ```bash
-git clone https://github.com/Rafit4/SemilleroCavernasGCPA.git
-cd SemilleroCavernasGCPA
+git clone https://github.com/Rafit4/GCPA_CRISMPipeline.git
+cd GCPA_CRISMPipeline
 python -m venv .venv
 .venv\Scripts\activate
 pip install -e .
@@ -39,7 +39,7 @@ crism-pipeline-gui
 
 ## Interfaz gráfica
 
-Misma lógica que el CLI, con branding GCPA, barra de progreso (%) por archivo/escena y acceso a la documentación.
+Ofrece la misma funcionalidad que el CLI, con identidad visual del GCPA, barra de progreso por archivo y escena, y acceso a la documentación.
 
 ```powershell
 .venv\Scripts\activate
@@ -76,7 +76,7 @@ python -m crism_pipeline run --input data/raw/frt000084c9_07_if166j_mtr3
 ## Estructura del proyecto
 
 ```
-Semillero/
+GCPA_CRISMPipeline/
 ├── assets/                    # Logo GCPA (referencia)
 ├── config/
 │   ├── pipeline.yaml          # Rutas, ODE, parámetros de stretch/clasificación

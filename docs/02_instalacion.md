@@ -1,6 +1,6 @@
-# 2. Guía de instalación (de cero a GUI)
+# 2. Guía de instalación
 
-Manual para **cualquier persona** que clone el repositorio y quiera dejar el **CRISM Pipeline** listo para usar: entorno Python, interfaz gráfica y **QGIS** para visualizar los productos geoespaciales.
+Esta guía cubre todo lo necesario para clonar el repositorio y dejar el CRISM Pipeline listo para usar: entorno de Python, interfaz gráfica y QGIS para visualizar los productos geoespaciales.
 
 ![Ruta de instalación: Git → Python → Clonar → .venv → GUI → QGIS](assets/instalacion_ruta.png)
 
@@ -13,8 +13,8 @@ flowchart LR
   E --> F[6 · QGIS]
 ```
 
-> **Tiempo estimado:** 20–40 minutos (según velocidad de descarga).  
-> **Sistema pensado primero:** Windows 10/11. También funciona en Linux y macOS (se indican las diferencias).
+> **Tiempo estimado:** 20–40 minutos, según la velocidad de descarga.  
+> **Sistema de referencia:** Windows 10/11. También funciona en Linux y macOS; se indican las diferencias donde aplican.
 
 ---
 
@@ -143,8 +143,8 @@ cd $HOME\Documents
 ### Paso 2 — Clonar el repositorio
 
 ```powershell
-git clone https://github.com/Rafit4/SemilleroCavernasGCPA.git
-cd SemilleroCavernasGCPA
+git clone https://github.com/Rafit4/GCPA_CRISMPipeline.git
+cd GCPA_CRISMPipeline
 ```
 
 Tras el `cd`, tu prompt debe estar **dentro** de la carpeta del proyecto (donde están `README.md`, `pyproject.toml`, `abrir_gui.bat`, etc.).
@@ -244,7 +244,7 @@ El script usa el Python de `.venv` (si existe), configura `PYTHONPATH` y lanza l
 ### Opción B — Comando tras `pip install -e .`
 
 ```powershell
-cd ruta\a\SemilleroCavernasGCPA
+cd ruta\a\GCPA_CRISMPipeline
 .\.venv\Scripts\activate
 crism-pipeline-gui
 ```
@@ -252,7 +252,7 @@ crism-pipeline-gui
 ### Opción C — Módulo Python
 
 ```powershell
-cd ruta\a\SemilleroCavernasGCPA
+cd ruta\a\GCPA_CRISMPipeline
 .\.venv\Scripts\activate
 $env:PYTHONPATH = "src"   # PowerShell; en CMD: set PYTHONPATH=src
 python -m crism_pipeline.gui
@@ -302,9 +302,9 @@ Salida típica: `data/processed/<PRODUCT_ID>.tif`.
 
 ---
 
-## 2.7 Checklist final (“ya está instalado”)
+## 2.7 Checklist final
 
-Marca mentalmente:
+Antes de dar por terminada la instalación, comprueba que:
 
 - [ ] `git --version` responde
 - [ ] `python --version` muestra **3.10 o superior**
@@ -398,7 +398,7 @@ En `config/pipeline.yaml`, sección `classification.default_features`.
 
 | Recurso | URL |
 |---------|-----|
-| Repositorio | [https://github.com/Rafit4/SemilleroCavernasGCPA](https://github.com/Rafit4/SemilleroCavernasGCPA) |
+| Repositorio | [https://github.com/Rafit4/GCPA_CRISMPipeline](https://github.com/Rafit4/GCPA_CRISMPipeline) |
 | Git | [https://git-scm.com/downloads](https://git-scm.com/downloads) |
 | Python | [https://www.python.org/downloads/](https://www.python.org/downloads/) |
 | QGIS | [https://qgis.org/download/](https://qgis.org/download/) |
