@@ -48,6 +48,17 @@ def _add_maps(sub: argparse._SubParsersAction) -> None:
         default=["MAF", "PHY", "HYD", "CAR", "FEM"],
         help="Códigos browse (TRU, MAF, PHY, ...)",
     )
+    p.add_argument(
+        "--indices",
+        nargs="*",
+        default=None,
+        metavar="GROUP",
+        help=(
+            "Además de los canales RGB de cada browse, generar índices "
+            "principales de mineral_groups. Sin nombres = todos; "
+            "con nombres = solo esos (ej. olivine mg_carbonate)"
+        ),
+    )
 
 
 def _add_detect(sub: argparse._SubParsersAction) -> None:
@@ -98,6 +109,48 @@ def _add_run(sub: argparse._SubParsersAction) -> None:
     p.add_argument("--out", type=Path, default=None)
     p.add_argument("--method", choices=["kmeans", "signature"], default="kmeans")
     p.add_argument("--n-clusters", type=int, default=5)
+    p.add_argument(
+        "--layouts",
+        action="store_true",
+        help="Tras maps/detect/classify, generar láminas (título, leyenda, escala, norte)",
+    )
+
+
+def add_layout_parser(sub: argparse._SubParsersAction) -> None:
+    p = sub.add_parser(
+        "layout",
+        help="Láminas cartográficas (leyenda, escala, norte, márgenes) desde GeoTIFF",
+    )
+    p.add_argument(
+        "--input",
+        type=Path,
+        required=True,
+        help="Carpeta data/maps/<producto> o un GeoTIFF suelto",
+    )
+    p.add_argument("--out", type=Path, default=None, help="Carpeta de láminas (default: <input>/layouts)")
+    p.add_argument(
+        "--kind",
+        nargs="*",
+        choices=["browse", "index", "detection", "classification"],
+        default=None,
+        help="Tipos a incluir (default: todos los que haya)",
+    )
+    p.add_argument(
+        "--engine",
+        choices=["matplotlib", "qgis", "both"],
+        default="matplotlib",
+        help="matplotlib siempre; qgis usa el compositor si QGIS Desktop está instalado",
+    )
+    p.add_argument("--paper", choices=["A4", "A3", "letter"], default="A4")
+    p.add_argument("--dpi", type=int, default=300)
+    p.add_argument(
+        "--format",
+        dest="formats",
+        nargs="*",
+        choices=["pdf", "png"],
+        default=["pdf", "png"],
+    )
+    p.add_argument("--no-atlas", action="store_true", help="No generar PDF atlas combinado")
 
 
 def cmd_download(args: argparse.Namespace) -> int:
@@ -140,7 +193,15 @@ def cmd_maps(args: argparse.Namespace) -> int:
     from .maps import generate_all_maps
 
     out = args.out or resolve_path("maps")
-    paths = generate_all_maps(args.input, out, browse_codes=args.browse)
+    include_indices = args.indices is not None
+    mineral_groups = args.indices if args.indices else None
+    paths = generate_all_maps(
+        args.input,
+        out,
+        browse_codes=args.browse,
+        mineral_groups=mineral_groups,
+        include_indices=include_indices,
+    )
     print(f"Mapas generados: {len(paths)} en {out}")
     return 0
 
@@ -189,6 +250,11 @@ def cmd_run(args: argparse.Namespace) -> int:
     )
     print(f"Pipeline completo para {cube.product_id}")
     print(f"Salidas en {maps_dir}")
+    if getattr(args, "layouts", False):
+        from .layout import export_cartography
+
+        sheets = export_cartography(maps_dir, maps_dir / "layouts")
+        print(f"Láminas: {len(sheets)} archivos en {maps_dir / 'layouts'}")
     return 0
 
 
@@ -233,6 +299,61 @@ def cmd_extract_if(args: argparse.Namespace) -> int:
     return 0
 
 
+def _add_qgis_project(sub: argparse._SubParsersAction) -> None:
+    p = sub.add_parser(
+        "qgis-project",
+        help="Proyecto QGIS con capas agrupadas (grupo TRU, CAR, CR2, …)",
+    )
+    p.add_argument(
+        "--input",
+        type=Path,
+        default=None,
+        help="Carpeta data/maps (default) o una escena",
+    )
+    p.add_argument(
+        "--out",
+        type=Path,
+        default=None,
+        help="Archivo .qgz (default: data/maps/caves_grupos.qgz)",
+    )
+    p.add_argument(
+        "--kind",
+        nargs="*",
+        choices=["browse", "index", "detection", "classification"],
+        default=["browse"],
+        help="Tipos a incluir (default: browse = TRU CAR CR2 …)",
+    )
+
+
+def cmd_qgis_project(args: argparse.Namespace) -> int:
+    from .qgis_groups import export_qgis_project
+
+    path = export_qgis_project(args.input, args.out, kinds=args.kind)
+    print(f"Proyecto QGIS: {path}")
+    return 0
+
+
+def cmd_layout(args: argparse.Namespace) -> int:
+    from .layout import export_cartography
+
+    out = args.out
+    written = export_cartography(
+        args.input,
+        out,
+        kinds=args.kind,
+        paper=args.paper,
+        dpi=args.dpi,
+        formats=args.formats,
+        atlas=not args.no_atlas,
+        engine=args.engine,
+    )
+    dest = out or (Path(args.input) / "layouts")
+    print(f"Láminas generadas: {len(written)} → {dest}")
+    for path in written:
+        print(f"  {path}")
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="crism-pipeline",
@@ -246,6 +367,8 @@ def build_parser() -> argparse.ArgumentParser:
     _add_classify(sub)
     _add_extract_if(sub)
     _add_run(sub)
+    add_layout_parser(sub)
+    _add_qgis_project(sub)
     return parser
 
 
@@ -261,6 +384,8 @@ def main(argv: list[str] | None = None) -> int:
         "classify": cmd_classify,
         "extract-if": cmd_extract_if,
         "run": cmd_run,
+        "layout": cmd_layout,
+        "qgis-project": cmd_qgis_project,
     }
     return handlers[args.command](args)
 

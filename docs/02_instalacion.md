@@ -300,6 +300,16 @@ python -m crism_pipeline export --input data/raw/frt000084c9_07_if166j_mtr3
 
 Salida típica: `data/processed/<PRODUCT_ID>.tif`.
 
+### Láminas automáticas (sin componer a mano)
+
+Tras generar maps / detección / clasificación:
+
+```powershell
+python -m crism_pipeline layout --input data/maps/<PRODUCT_ID>
+```
+
+Eso crea PDF/PNG con leyenda, escala, norte y márgenes. QGIS sigue siendo útil para superponer basemaps o medir; no es obligatorio para las figuras del informe. Si QGIS 3.x está instalado, `--engine qgis` usa su compositor de impresión.
+
 ---
 
 ## 2.7 Checklist final

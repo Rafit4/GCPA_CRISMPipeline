@@ -101,3 +101,33 @@ flowchart TD
 Los GeoTIFF generados (o el `.IMG` ENVI) pueden abrirse en QGIS. Si el header ENVI incluye `map info`, el pipeline escribe CRS EPSG:4326 y geotransform aproximado.
 
 Para análisis preciso en proyección MRO, consulta el label PDS asociado al producto MTRDR.
+
+## 4.8 Láminas cartográficas automáticas
+
+Los PNG de `maps` / `detect` / `classify` son previsualizaciones. Para **figuras de informe** (título, leyenda, barra de escala, norte, grilla, márgenes, pie de cita) el pipeline compone láminas A4 sin abrir QGIS:
+
+```powershell
+python -m crism_pipeline layout --input data/maps/<PRODUCT_ID>
+```
+
+Salida típica: `data/maps/<PRODUCT_ID>/layouts/` (`*_sheet.pdf`, `*_sheet.png` y un atlas PDF).
+
+| Opción | Efecto |
+|--------|--------|
+| `--kind browse index detection classification` | Filtra tipos |
+| `--engine matplotlib` | Compositor propio (por defecto; no requiere QGIS) |
+| `--engine qgis` | Compositor de impresión de QGIS Desktop si está instalado |
+| `--engine both` | Matplotlib + QGIS |
+| `--paper A4\|A3\|letter` | Tamaño de página |
+| `--dpi 300` | Resolución |
+| `--format pdf png` | Formatos |
+
+En el pipeline completo:
+
+```powershell
+python -m crism_pipeline run --input data/raw/<escena> --layouts
+```
+
+Si QGIS 3.x está instalado, `--engine qgis` exporta además un `.qgz` con layouts. Si no, se escribe `layouts/qgis/qgis_export_layouts.py` para lanzarlo con `python-qgis.bat` (ver `LEEME_QGIS.txt`).
+
+La barra de escala usa el geotransform del GeoTIFF. En CRS geográficos se convierte a km con el radio de Marte (IAU 2000). Sin georreferencia, la lámina se genera igual y indica que la escala no está disponible.

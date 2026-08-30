@@ -25,7 +25,7 @@ crism-pipeline-gui
 | Zona | Función |
 |------|---------|
 | **Cabecera GCPA** | Logo y nombre del grupo; accesos rápidos a Manual y Conceptos |
-| **Pestañas** | Descarga, Exportar, Mapas, Detección, Clasificación, Espectros IF, Pipeline, Ayuda |
+| **Pestañas** | Descarga, Exportar, Mapas, Detección, Clasificación, Espectros IF, Pipeline, Cartografía, Ayuda |
 | **CLI equivalente** | Comando de terminal listo para copiar |
 | **Barra de progreso** | Porcentaje y detalle del archivo/escena en curso |
 | **Registro** | Mensajes y errores de la tarea |
@@ -43,7 +43,8 @@ flowchart LR
 1. **Descarga** — archivo SearchResults de ODE (p. ej. `CRISM2 (1).txt`) o Product ID / bbox.  
 2. **Mapas** o **Pipeline** — sobre un directorio en `data/raw/…` (botón **Raw**).  
 3. **Detección** / **Clasificación** — según el estudio.  
-4. **Exportar** — solo si necesitas GeoTIFF para QGIS (opcional).
+4. **Cartografía** — láminas con leyenda, escala y norte a partir de los GeoTIFF.  
+5. **Exportar** — solo si necesitas el cubo GeoTIFF completo para QGIS (opcional).
 
 El flujo principal trabaja con **ENVI** (`.img` / `.hdr`) en `data/raw`. No hace falta convertir a HDF5.
 
@@ -81,7 +82,17 @@ Explora el cubo **I/F** hiperespectral (no el browse SR):
 Requiere haber descargado IF (`Datos: IF` o `ambos` en la pestaña Descarga).
 
 ### Pipeline
-Encadena maps → detect → classify en `data/maps/<PRODUCT_ID>/`.
+Encadena maps → detect → classify en `data/maps/<PRODUCT_ID>/`. Marca **Generar láminas cartográficas al final** para componer PDF/PNG automáticamente (`--layouts`).
+
+### Cartografía
+Compone láminas A4 (PDF/PNG) con título, leyenda, barra de escala, norte, grilla y márgenes a partir de los GeoTIFF ya generados:
+
+1. **Entrada** — carpeta `data/maps/<producto>` (botón **Maps**) o un `.tif`.
+2. Elige tipos: browse, index, detection, classification.
+3. Motor **matplotlib** (siempre) o **qgis** si tienes QGIS Desktop.
+4. **Generar láminas** — salida en `data/maps/layouts` o la carpeta que indiques.
+
+No sustituye a QGIS para análisis GIS; produce figuras listas para informe o presentación.
 
 ### Ayuda
 Lista la documentación. **Ver** abre el texto en una ventana; **Abrir** lo abre con el programa asociado (p. ej. Cursor/VS Code).
@@ -103,7 +114,7 @@ Lista la documentación. **Ver** abre el texto en una ventana; **Abrir** lo abre
 La GUI **no cambia** los subcomandos:
 
 ```text
-python -m crism_pipeline download|export|maps|detect|classify|run …
+python -m crism_pipeline download|export|maps|detect|classify|run|layout …
 ```
 
 Copia el comando de la barra inferior si quieres reproducir el mismo paso en terminal o en un script.

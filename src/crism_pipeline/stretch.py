@@ -2,9 +2,24 @@
 
 from __future__ import annotations
 
+from dataclasses import asdict, dataclass
+
 import numpy as np
 
 from .config import pipeline_config
+
+
+@dataclass(frozen=True)
+class StretchLimits:
+    """Límites absolutos usados al estirar una banda a 0–255."""
+
+    band_name: str
+    vmin: float
+    vmax: float
+    mode: str  # local_percentile | fixed_lower_local_upper | empty
+
+    def to_dict(self) -> dict:
+        return asdict(self)
 
 
 def valid_data_mask(band: np.ndarray) -> np.ndarray:
@@ -26,24 +41,18 @@ def _percentile_limits(arr: np.ndarray, lo: float, hi: float) -> tuple[float, fl
     return float(np.percentile(arr, lo)), float(np.percentile(arr, hi))
 
 
-def stretch_band(
+def compute_stretch_limits(
     band: np.ndarray,
     band_name: str,
     *,
     global_upper: float | None = None,
-) -> np.ndarray:
-    """
-    Estira una banda SR a rango 0–255 (uint8) para visualización.
-
-    Parámetros en local_percentile_params usan percentiles 0.1–99.9 de la escena.
-    El resto usa límite inferior fijo en 0 y superior = max(percentil global 99, local 99.9).
-    """
+) -> StretchLimits:
+    """Calcula vmin/vmax absolutos (Viviano §5.3) sin aplicar el estiramiento."""
     cfg = pipeline_config()["stretch"]
     local_params = set(cfg["local_percentile_params"])
-    out = np.zeros(band.shape, dtype=np.float32)
     valid = valid_data_mask(band)
     if not np.any(valid):
-        return out.astype(np.uint8)
+        return StretchLimits(band_name=band_name, vmin=0.0, vmax=1.0, mode="empty")
 
     sample = band[valid]
 
@@ -53,6 +62,7 @@ def stretch_band(
             cfg["local_lower_pct"],
             cfg["local_upper_pct"],
         )
+        mode = "local_percentile"
     else:
         vmin = float(cfg["fixed_lower"])
         local_hi = _percentile_limits(sample, 0.0, cfg["local_upper_pct"])[1]
@@ -62,16 +72,41 @@ def stretch_band(
             vmin, vmax = _percentile_limits(
                 sample, cfg["local_lower_pct"], cfg["local_upper_pct"]
             )
+            mode = "local_percentile"
         else:
             vmax = max(float(g_hi), float(local_hi))
+            mode = "fixed_lower_local_upper"
 
     if vmax <= vmin:
         vmax = vmin + 1e-6
 
-    scaled = (band.astype(np.float64) - vmin) / (vmax - vmin)
-    scaled = np.clip(scaled, 0.0, 1.0)
-    out[valid] = scaled[valid] * 255.0
-    return out.astype(np.uint8)
+    return StretchLimits(band_name=band_name, vmin=float(vmin), vmax=float(vmax), mode=mode)
+
+
+def stretch_band(
+    band: np.ndarray,
+    band_name: str,
+    *,
+    global_upper: float | None = None,
+    return_limits: bool = False,
+) -> np.ndarray | tuple[np.ndarray, StretchLimits]:
+    """
+    Estira una banda SR a rango 0–255 (uint8) para visualización.
+
+    Parámetros en local_percentile_params usan percentiles 0.1–99.9 de la escena.
+    El resto usa límite inferior fijo en 0 y superior = max(percentil global 99, local 99.9).
+    """
+    limits = compute_stretch_limits(band, band_name, global_upper=global_upper)
+    out = np.zeros(band.shape, dtype=np.float32)
+    valid = valid_data_mask(band)
+    if np.any(valid):
+        scaled = (band.astype(np.float64) - limits.vmin) / (limits.vmax - limits.vmin)
+        scaled = np.clip(scaled, 0.0, 1.0)
+        out[valid] = scaled[valid] * 255.0
+    result = out.astype(np.uint8)
+    if return_limits:
+        return result, limits
+    return result
 
 
 def stretch_rgb(
@@ -79,11 +114,17 @@ def stretch_rgb(
     g: np.ndarray,
     b: np.ndarray,
     names: tuple[str, str, str],
-) -> np.ndarray:
+    *,
+    return_limits: bool = False,
+) -> np.ndarray | tuple[np.ndarray, list[StretchLimits]]:
     """Genera imagen RGB uint8 (H, W, 3)."""
-    channels = [
-        stretch_band(r, names[0]),
-        stretch_band(g, names[1]),
-        stretch_band(b, names[2]),
-    ]
-    return np.stack(channels, axis=-1)
+    channels: list[np.ndarray] = []
+    limits: list[StretchLimits] = []
+    for arr, name in zip((r, g, b), names, strict=True):
+        stretched, lim = stretch_band(arr, name, return_limits=True)
+        channels.append(stretched)
+        limits.append(lim)
+    rgb = np.stack(channels, axis=-1)
+    if return_limits:
+        return rgb, limits
+    return rgb

@@ -13,6 +13,7 @@ Desarrollado en el Grupo de investigación en Ciencias Planetarias y Astrobiolog
 | `detect` | Detección binaria de minerales por umbrales adaptativos |
 | `classify` | Clasificación de unidades geológicas (K-means, firmas, supervisado) |
 | `run` | Ejecuta maps + detect + classify sobre el cubo ENVI descargado |
+| `layout` | Láminas cartográficas (título, leyenda, escala, norte) en PDF/PNG |
 | `export` | *(Opcional)* Copia GeoTIFF para QGIS |
 | GUI | Interfaz CustomTkinter (`crism-pipeline-gui`) — no altera el CLI |
 
@@ -69,9 +70,12 @@ python -m crism_pipeline classify --input data/raw/frt000084c9_07_if166j_mtr3 --
 
 # Pipeline completo (sin conversión intermedia)
 python -m crism_pipeline run --input data/raw/frt000084c9_07_if166j_mtr3
+
+# Láminas con leyenda, escala y norte (desde los GeoTIFF de maps/detect/classify)
+python -m crism_pipeline layout --input data/maps/frt000084c9_07_if166j_mtr3
 ```
 
-**En QGIS:** abre el archivo `.IMG` (no el `.hdr`) de `data/raw/` — ya incluye CRS y 60 bandas con nombre.
+**En QGIS:** abre el archivo `.IMG` (no el `.hdr`) de `data/raw/` — ya incluye CRS y 60 bandas con nombre. Para figuras listas para informe, usa `layout` (no hace falta componer a mano).
 
 ## Estructura del proyecto
 

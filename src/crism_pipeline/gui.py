@@ -52,6 +52,7 @@ DOCS = [
     ("Mapas minerales", "05_mapas_minerales.md"),
     ("Detección de minerales", "06_deteccion_minerales.md"),
     ("Clasificación de unidades", "07_clasificacion_unidades.md"),
+    ("Láminas cartográficas", "04_pipeline_procesamiento.md"),
 ]
 
 _TAB_NAMES = (
@@ -62,6 +63,7 @@ _TAB_NAMES = (
     "Clasificación",
     "Espectros IF",
     "Pipeline",
+    "Cartografía",
     "Ayuda",
 )
 
@@ -251,6 +253,19 @@ def _list_raw_products() -> list[Path]:
     if not raw.is_dir():
         return []
     return sorted(p for p in raw.iterdir() if p.is_dir())
+
+
+def _list_map_folders() -> list[Path]:
+    root = resolve_path("maps")
+    if not root.is_dir():
+        return []
+    folders: list[Path] = []
+    if any(root.rglob("*.tif")):
+        folders.append(root)
+    for path in sorted(root.iterdir()):
+        if path.is_dir() and any(path.rglob("*.tif")):
+            folders.append(path)
+    return folders
 
 
 def _open_path(path: Path) -> bool:
@@ -665,6 +680,7 @@ class PathRow(ctk.CTkFrame):
         directory: bool = True,
         show_raw: bool = False,
         show_if: bool = False,
+        show_maps: bool = False,
         on_change: Callable[[], None] | None = None,
     ) -> None:
         super().__init__(master, fg_color="transparent")
@@ -689,6 +705,10 @@ class PathRow(ctk.CTkFrame):
             if_btn = ctk.CTkButton(self, text="IF", width=40, command=self._pick_if)
             if_btn.pack(side="left", padx=(6, 0))
             self._controls.append(if_btn)
+        if show_maps:
+            maps_btn = ctk.CTkButton(self, text="Maps", width=56, command=self._pick_maps)
+            maps_btn.pack(side="left", padx=(6, 0))
+            self._controls.append(maps_btn)
         if on_change:
             self.var.trace_add("write", lambda *_: on_change())
 
@@ -731,6 +751,13 @@ class PathRow(ctk.CTkFrame):
             )
             return
         self._pick_from_list("Productos IF en data/raw", products)
+
+    def _pick_maps(self) -> None:
+        folders = _list_map_folders()
+        if not folders:
+            messagebox.showinfo("Maps", f"No hay GeoTIFF en {resolve_path('maps')}")
+            return
+        self._pick_from_list("Carpetas en data/maps", folders)
 
     def _pick_from_list(self, title: str, products: list[Path]) -> None:
         win = ctk.CTkToplevel(self)
@@ -830,6 +857,7 @@ class CrismApp(ctk.CTk):
         self._build_classify()
         self._build_if_spectra()
         self._build_run()
+        self._build_layout()
         self._build_help()
         self._build_footer()
         self.tabs.set("Descarga")
@@ -1215,6 +1243,20 @@ class CrismApp(ctk.CTk):
             t, _browse_codes(), defaults=DEFAULT_BROWSE, on_change=self._sync_maps_cli
         )
         self.mp_browse.pack(fill="x", pady=4)
+        ctk.CTkLabel(
+            t,
+            text="Siempre se exportan en indices/ los canales RGB de cada browse elegido.",
+            text_color=COLORS["muted"],
+            wraplength=520,
+            justify="left",
+        ).pack(anchor="w", pady=(4, 0))
+        self.mp_indices = ctk.BooleanVar(value=False)
+        ctk.CTkCheckBox(
+            t,
+            text="Añadir también índices de mineral_groups (olivine, hcp, …)",
+            variable=self.mp_indices,
+            command=self._sync_maps_cli,
+        ).pack(anchor="w", pady=(8, 4))
         ctk.CTkButton(t, text="Generar mapas", height=36, command=self._run_maps).pack(anchor="e", pady=10)
 
     def _sync_maps_cli(self) -> None:
@@ -1225,6 +1267,8 @@ class CrismApp(ctk.CTk):
         if self.mp_out.var.get() and Path(self.mp_out.var.get()) != resolve_path("maps"):
             parts += ["--out", _q(self.mp_out.var.get())]
         parts += ["--browse", *browse]
+        if self.mp_indices.get():
+            parts.append("--indices")
         self.cli_var.set(" ".join(parts))
 
     def _run_maps(self) -> None:
@@ -1238,12 +1282,19 @@ class CrismApp(ctk.CTk):
             messagebox.showerror("Mapas", "Selecciona al menos un browse product.")
             return
 
+        include_indices = bool(self.mp_indices.get())
+
         def job() -> None:
             from .maps import generate_all_maps
 
             n = len(browse)
-            self.worker.report_progress("maps", 0.05, f"Generando {n} browse + índices…")
-            paths = generate_all_maps(inp, out, browse_codes=browse)
+            msg = f"Generando {n} browse + canales RGB…"
+            if include_indices:
+                msg = f"Generando {n} browse + canales + mineral_groups…"
+            self.worker.report_progress("maps", 0.05, msg)
+            paths = generate_all_maps(
+                inp, out, browse_codes=browse, include_indices=include_indices
+            )
             self.worker.log(f"Mapas generados: {len(paths)} → {out}\n")
             self.worker.report_progress("maps", 1.0, f"{len(paths)} archivos")
 
@@ -1810,6 +1861,14 @@ class CrismApp(ctk.CTk):
         make_entry(row2, textvariable=self.run_n, width=80).pack(side="left")
         self.run_n.trace_add("write", lambda *_: self._sync_run_cli())
 
+        self.run_layouts = ctk.BooleanVar(value=False)
+        ctk.CTkCheckBox(
+            t,
+            text="Generar láminas cartográficas al final (título, leyenda, escala, norte)",
+            variable=self.run_layouts,
+            command=self._sync_run_cli,
+        ).pack(anchor="w", pady=(8, 4))
+
         ctk.CTkButton(t, text="Ejecutar pipeline completo", height=36, command=self._run_pipeline).pack(
             anchor="e", pady=12
         )
@@ -1830,6 +1889,8 @@ class CrismApp(ctk.CTk):
                 ]
             )
         )
+        if self.run_layouts.get():
+            self.cli_var.set(self.cli_var.get() + " --layouts")
 
     def _run_pipeline(self) -> None:
         self._sync_run_cli()
@@ -1858,10 +1919,176 @@ class CrismApp(ctk.CTk):
             run_classification_pipeline(
                 inp, maps_dir / "classification", method=method, n_clusters=n_clusters
             )
+            if self.run_layouts.get():
+                from .layout import export_cartography
+
+                self.worker.report_progress("run", 0.9, "Láminas…")
+                sheets = export_cartography(maps_dir, maps_dir / "layouts")
+                self.worker.log(f"Láminas: {len(sheets)} → {maps_dir / 'layouts'}\n")
             self.worker.log(f"Salidas en {maps_dir}\n")
             self.worker.report_progress("run", 1.0, "Pipeline completo")
 
         self.worker.run("Pipeline completo", job)
+
+    # ── Cartografía ───────────────────────────────────────────────────────
+
+    def _build_layout(self) -> None:
+        t = self._tab_body("Cartografía")
+        ctk.CTkLabel(
+            t,
+            text=(
+                "Compone láminas A4 (PDF/PNG) con título, leyenda, escala, norte y márgenes "
+                "a partir de los GeoTIFF de maps / detección / clasificación. "
+                "No hace falta abrir QGIS: matplotlib genera las figuras. "
+                "Si QGIS Desktop está instalado, --engine qgis usa el compositor de impresión."
+            ),
+            text_color=COLORS["muted"],
+            wraplength=720,
+            justify="left",
+        ).pack(anchor="w", pady=(8, 10))
+        self.ly_input = PathRow(
+            t,
+            "Entrada",
+            default=str(resolve_path("maps")),
+            show_maps=True,
+            on_change=self._sync_layout_cli,
+        )
+        self.ly_input.pack(fill="x", pady=6)
+        self.ly_out = PathRow(
+            t,
+            "Salida",
+            default=str(resolve_path("maps") / "layouts"),
+            on_change=self._sync_layout_cli,
+        )
+        self.ly_out.pack(fill="x", pady=6)
+
+        ctk.CTkLabel(t, text="Tipos de mapa", text_color=COLORS["muted"]).pack(anchor="w", pady=(8, 4))
+        self.ly_kinds = CheckList(
+            t,
+            ["browse", "index", "detection", "classification"],
+            defaults=["browse", "index", "detection", "classification"],
+            on_change=self._sync_layout_cli,
+            height=90,
+        )
+        self.ly_kinds.pack(fill="x", pady=4)
+
+        row = ctk.CTkFrame(t, fg_color="transparent")
+        row.pack(fill="x", pady=6)
+        ctk.CTkLabel(row, text="Motor", width=110, anchor="w", text_color=COLORS["muted"]).pack(side="left")
+        self.ly_engine = ctk.StringVar(value="matplotlib")
+        ctk.CTkOptionMenu(
+            row,
+            variable=self.ly_engine,
+            values=["matplotlib", "qgis", "both"],
+            command=lambda _: self._sync_layout_cli(),
+        ).pack(side="left")
+
+        row2 = ctk.CTkFrame(t, fg_color="transparent")
+        row2.pack(fill="x", pady=6)
+        ctk.CTkLabel(row2, text="Papel", width=110, anchor="w", text_color=COLORS["muted"]).pack(side="left")
+        self.ly_paper = ctk.StringVar(value="A4")
+        ctk.CTkOptionMenu(
+            row2,
+            variable=self.ly_paper,
+            values=["A4", "A3", "letter"],
+            command=lambda _: self._sync_layout_cli(),
+        ).pack(side="left")
+        ctk.CTkLabel(row2, text="  DPI", text_color=COLORS["muted"]).pack(side="left", padx=(16, 6))
+        self.ly_dpi = ctk.StringVar(value="300")
+        make_entry(row2, textvariable=self.ly_dpi, width=70).pack(side="left")
+        self.ly_dpi.trace_add("write", lambda *_: self._sync_layout_cli())
+
+        row3 = ctk.CTkFrame(t, fg_color="transparent")
+        row3.pack(fill="x", pady=6)
+        self.ly_pdf = ctk.BooleanVar(value=True)
+        self.ly_png = ctk.BooleanVar(value=True)
+        ctk.CTkCheckBox(row3, text="PDF", variable=self.ly_pdf, command=self._sync_layout_cli).pack(
+            side="left", padx=(110, 12)
+        )
+        ctk.CTkCheckBox(row3, text="PNG", variable=self.ly_png, command=self._sync_layout_cli).pack(
+            side="left"
+        )
+
+        btns = ctk.CTkFrame(t, fg_color="transparent")
+        btns.pack(fill="x", pady=12)
+        ctk.CTkButton(
+            btns,
+            text="Abrir salida",
+            width=120,
+            fg_color=COLORS["card"],
+            command=lambda: _open_path(self.ly_out.get()),
+        ).pack(side="right", padx=(8, 0))
+        ctk.CTkButton(btns, text="Generar láminas", height=36, command=self._run_layout).pack(
+            side="right"
+        )
+
+    def _sync_layout_cli(self) -> None:
+        if self.tabs.get() != "Cartografía":
+            return
+        kinds = self.ly_kinds.selected()
+        formats: list[str] = []
+        if self.ly_pdf.get():
+            formats.append("pdf")
+        if self.ly_png.get():
+            formats.append("png")
+        parts = [
+            "python -m crism_pipeline layout",
+            "--input",
+            _input_arg(self.ly_input.var.get()),
+        ]
+        default_out = resolve_path("maps") / "layouts"
+        if self.ly_out.var.get() and Path(self.ly_out.var.get()) != default_out:
+            parts += ["--out", _q(self.ly_out.var.get())]
+        if kinds:
+            parts += ["--kind", *kinds]
+        parts += ["--engine", self.ly_engine.get(), "--paper", self.ly_paper.get()]
+        if self.ly_dpi.get().strip():
+            parts += ["--dpi", self.ly_dpi.get().strip()]
+        if formats:
+            parts += ["--format", *formats]
+        self.cli_var.set(" ".join(parts))
+
+    def _run_layout(self) -> None:
+        self._sync_layout_cli()
+        inp = self.ly_input.get()
+        if not str(inp):
+            messagebox.showerror("Cartografía", "Selecciona la carpeta de mapas (GeoTIFF).")
+            return
+        formats: list[str] = []
+        if self.ly_pdf.get():
+            formats.append("pdf")
+        if self.ly_png.get():
+            formats.append("png")
+        if not formats:
+            messagebox.showerror("Cartografía", "Elige al menos un formato (PDF o PNG).")
+            return
+        kinds = self.ly_kinds.selected() or None
+        out = self.ly_out.get()
+        engine = self.ly_engine.get()
+        paper = self.ly_paper.get()
+        dpi = int(self.ly_dpi.get()) if self.ly_dpi.get().strip() else 300
+
+        def job() -> None:
+            from .layout import export_cartography
+
+            self.worker.report_progress("layout", 0.1, "Componiendo láminas…")
+            written = export_cartography(
+                inp,
+                out,
+                kinds=kinds,
+                paper=paper,
+                dpi=dpi,
+                formats=formats,
+                engine=engine,
+            )
+            self.worker.log(f"Láminas: {len(written)} → {out}\n")
+            for path in written[:12]:
+                self.worker.log(f"  {path.name}\n")
+            if len(written) > 12:
+                self.worker.log(f"  … {len(written) - 12} más\n")
+            self.worker.report_progress("layout", 1.0, "Láminas listas")
+
+        self.worker.run("Láminas cartográficas", job)
 
     # ── Ayuda / documentación ─────────────────────────────────────────────
 
@@ -1917,6 +2144,7 @@ class CrismApp(ctk.CTk):
             "Clasificación": self._sync_classify_cli,
             "Espectros IF": self._sync_if_cli,
             "Pipeline": self._sync_run_cli,
+            "Cartografía": self._sync_layout_cli,
             "Ayuda": lambda: self.cli_var.set(
                 "python -m crism_pipeline --help  # ver docs/08_manual_gui.md"
             ),

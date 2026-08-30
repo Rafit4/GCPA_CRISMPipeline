@@ -1,0 +1,930 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Mapas · Detección · Clasificación — CRISM SR</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,700&family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css" />
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}]})"></script>
+<style>
+  :root {
+    --bg: #f7f3ff;
+    --bg2: #fff8f2;
+    --ink: #2a2540;
+    --muted: #6b6480;
+    --accent: #ff7a9a;
+    --accent2: #7ec8c4;
+    --accent3: #ffc857;
+    --accent4: #9b8cff;
+    --card: rgba(255,255,255,0.72);
+    --stroke: rgba(42,37,64,0.08);
+    --shadow: 0 18px 50px rgba(90,60,120,0.12);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; }
+  body {
+    font-family: "Nunito", system-ui, sans-serif;
+    color: var(--ink);
+    background:
+      radial-gradient(1200px 600px at 10% -10%, #ffe3ec 0%, transparent 55%),
+      radial-gradient(900px 500px at 100% 0%, #d9f5f3 0%, transparent 50%),
+      radial-gradient(800px 500px at 50% 100%, #fff0c8 0%, transparent 45%),
+      var(--bg);
+    overflow: hidden;
+  }
+  .deck { position: relative; width: 100vw; height: 100vh; }
+  .slide {
+    position: absolute; inset: 0;
+    display: none; padding: clamp(1.2rem, 3vw, 2.8rem) clamp(1.4rem, 4vw, 4rem);
+    overflow: auto;
+    animation: fadeIn .35s ease;
+  }
+  .slide.active { display: flex; flex-direction: column; justify-content: center; }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+
+  h1, h2, h3 { font-family: "Fraunces", Georgia, serif; font-weight: 700; letter-spacing: -0.02em; }
+  h1 { font-size: clamp(2.2rem, 5vw, 3.6rem); line-height: 1.1; }
+  h2 { font-size: clamp(1.6rem, 3.2vw, 2.4rem); margin-bottom: .8rem; }
+  h3 { font-size: 1.15rem; margin-bottom: .4rem; color: #4a3f6b; }
+  p, li { font-size: clamp(.95rem, 1.35vw, 1.12rem); line-height: 1.55; }
+  .lead { font-size: clamp(1.05rem, 1.8vw, 1.3rem); color: var(--muted); max-width: 46rem; }
+  .muted { color: var(--muted); }
+  .tiny { font-size: .85rem; color: var(--muted); }
+
+  .pill {
+    display: inline-flex; align-items: center; gap: .4rem;
+    background: white; border: 1px solid var(--stroke);
+    border-radius: 999px; padding: .35rem .85rem;
+    font-weight: 700; font-size: .85rem; box-shadow: var(--shadow);
+  }
+  .pill .dot { width: .55rem; height: .55rem; border-radius: 50%; background: var(--accent); }
+
+  .hero {
+    display: grid; grid-template-columns: 1.2fr .8fr; gap: 2rem; align-items: center;
+  }
+  @media (max-width: 900px) { .hero { grid-template-columns: 1fr; } }
+
+  .planet {
+    width: min(320px, 70vw); aspect-ratio: 1; margin: 0 auto; position: relative;
+    border-radius: 50%;
+    background:
+      radial-gradient(circle at 30% 28%, #ffe9c8 0%, transparent 35%),
+      radial-gradient(circle at 65% 60%, #ff9a76 0%, #e86a4a 45%, #b84a3a 80%);
+    box-shadow:
+      inset -30px -20px 50px rgba(80,20,10,.35),
+      0 25px 60px rgba(180,80,60,.25);
+  }
+  .planet::after {
+    content: ""; position: absolute; inset: -18px;
+    border-radius: 50%; border: 2px dashed rgba(255,122,154,.45);
+    animation: spin 28s linear infinite;
+  }
+  .sparkle {
+    position: absolute; width: 10px; height: 10px; border-radius: 50%;
+    background: white; box-shadow: 0 0 12px white; opacity: .9;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+  .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; }
+  .grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: .8rem; }
+  @media (max-width: 900px) {
+    .grid-2, .grid-3, .grid-4 { grid-template-columns: 1fr; }
+  }
+
+  .card {
+    background: var(--card); backdrop-filter: blur(10px);
+    border: 1px solid var(--stroke); border-radius: 22px;
+    padding: 1.1rem 1.25rem; box-shadow: var(--shadow);
+  }
+  .card.soft-pink { background: linear-gradient(160deg, #fff, #ffe8ef); }
+  .card.soft-mint { background: linear-gradient(160deg, #fff, #e8faf8); }
+  .card.soft-peach { background: linear-gradient(160deg, #fff, #fff3e0); }
+  .card.soft-lilac { background: linear-gradient(160deg, #fff, #eeeaff); }
+
+  .emoji {
+    width: 2.4rem; height: 2.4rem; border-radius: 14px;
+    display: grid; place-items: center; font-size: 1.2rem;
+    background: white; margin-bottom: .55rem; box-shadow: var(--shadow);
+  }
+
+  .formula {
+    background: #1f1b2e; color: #f6f2ff; border-radius: 18px;
+    padding: 1rem 1.2rem; overflow-x: auto; margin: .7rem 0;
+    font-size: .95rem; box-shadow: var(--shadow);
+  }
+  .formula .katex { color: #f6f2ff; }
+  .formula .katex-display { margin: .2rem 0; }
+
+  table {
+    width: 100%; border-collapse: collapse; font-size: .92rem;
+    background: white; border-radius: 16px; overflow: hidden;
+    box-shadow: var(--shadow);
+  }
+  th, td { padding: .55rem .7rem; text-align: left; border-bottom: 1px solid var(--stroke); }
+  th { background: #2a2540; color: white; font-weight: 700; }
+  tr:nth-child(even) td { background: #faf8ff; }
+  code {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    background: #efeaff; color: #5a3db8; padding: .1rem .35rem; border-radius: 6px;
+    font-size: .88em;
+  }
+
+  .flow {
+    display: flex; flex-wrap: wrap; gap: .55rem; align-items: center; justify-content: center;
+  }
+  .flow .node {
+    background: white; border-radius: 16px; padding: .7rem 1rem;
+    border: 1px solid var(--stroke); font-weight: 800; box-shadow: var(--shadow);
+  }
+  .flow .arrow { color: var(--accent); font-weight: 900; font-size: 1.2rem; }
+
+  .chip-row { display: flex; flex-wrap: wrap; gap: .45rem; margin-top: .55rem; }
+  .chip {
+    background: white; border: 1px solid var(--stroke); border-radius: 999px;
+    padding: .25rem .7rem; font-size: .82rem; font-weight: 700;
+  }
+  .chip.pink { background: #ffe4ec; }
+  .chip.mint { background: #dff7f4; }
+  .chip.peach { background: #ffe9cc; }
+  .chip.lilac { background: #ebe6ff; }
+
+  .note {
+    margin-top: .8rem; padding: .8rem 1rem; border-radius: 16px;
+    background: linear-gradient(90deg, #fff6d8, #ffe8f0);
+    border: 1px dashed rgba(255,122,154,.35); font-size: .92rem;
+  }
+
+  .footer-bar {
+    position: fixed; left: 0; right: 0; bottom: 0;
+    display: flex; align-items: center; justify-content: space-between;
+    padding: .65rem 1.2rem; background: rgba(255,255,255,.7);
+    backdrop-filter: blur(12px); border-top: 1px solid var(--stroke);
+    z-index: 20; font-size: .85rem; font-weight: 700;
+  }
+  .nav-btns { display: flex; gap: .4rem; }
+  button {
+    border: none; cursor: pointer; border-radius: 999px;
+    padding: .45rem .9rem; font-family: inherit; font-weight: 800;
+    background: var(--ink); color: white;
+  }
+  button.ghost { background: white; color: var(--ink); border: 1px solid var(--stroke); }
+  .progress {
+    flex: 1; margin: 0 1rem; height: 8px; background: #efeaff; border-radius: 999px; overflow: hidden;
+  }
+  .progress > i {
+    display: block; height: 100%; width: 0%;
+    background: linear-gradient(90deg, var(--accent), var(--accent4), var(--accent2));
+    border-radius: 999px; transition: width .25s ease;
+  }
+  .title-row { display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-bottom: .4rem; }
+  .section-tag {
+    font-size: .75rem; font-weight: 800; letter-spacing: .08em; text-transform: uppercase;
+    color: var(--accent); margin-bottom: .35rem;
+  }
+  ul.clean { list-style: none; display: grid; gap: .45rem; }
+  ul.clean li::before { content: "✦ "; color: var(--accent2); font-weight: 900; }
+  .two-col { display: grid; grid-template-columns: 1.1fr .9fr; gap: 1.2rem; align-items: start; }
+  @media (max-width: 900px) { .two-col { grid-template-columns: 1fr; } }
+  .kbd { background: #2a2540; color: white; border-radius: 8px; padding: .15rem .45rem; font-size: .8rem; }
+</style>
+</head>
+<body>
+<div class="deck" id="deck">
+
+  <!-- 0 -->
+  <section class="slide active">
+    <div class="hero">
+      <div>
+        <span class="pill"><span class="dot"></span> Semillero · Pipeline CRISM MTRDR SR</span>
+        <h1 style="margin-top:1rem">Mapas, detección<br/>y clasificación</h1>
+        <p class="lead" style="margin-top:1rem">
+          Una guía cute y detalladita de los conceptos, formulaciones y métodos
+          para interpretar índices espectrales Viviano–Beck (2014) en Marte.
+        </p>
+        <div class="chip-row" style="margin-top:1.2rem">
+          <span class="chip pink">continuums &amp; BD</span>
+          <span class="chip mint">browse RGB</span>
+          <span class="chip peach">máscaras AND</span>
+          <span class="chip lilac">k-means · RF</span>
+        </div>
+        <p class="tiny" style="margin-top:1.4rem">Usa <span class="kbd">←</span> <span class="kbd">→</span> o los botones de abajo · Esc para índice</p>
+      </div>
+      <div>
+        <div class="planet">
+          <span class="sparkle" style="top:18%;left:22%"></span>
+          <span class="sparkle" style="top:70%;left:78%"></span>
+          <span class="sparkle" style="top:40%;left:85%"></span>
+        </div>
+        <p class="tiny" style="text-align:center;margin-top:1rem">CRISM · MRO · productos SR refinados</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- 1 -->
+  <section class="slide">
+    <div class="section-tag">Roadmap</div>
+    <h2>Qué vamos a recorrer hoy</h2>
+    <div class="grid-3" style="margin-top:1rem">
+      <div class="card soft-pink">
+        <div class="emoji">🌈</div>
+        <h3>1. Conceptos</h3>
+        <p>CRISM, ladder de productos, índices SR y por qué no son abundancia.</p>
+      </div>
+      <div class="card soft-mint">
+        <div class="emoji">∫</div>
+        <h3>2. Formulaciones</h3>
+        <p>Continuum, BD, SH, BDI, MIN, drop-off, slopes y ratios.</p>
+      </div>
+      <div class="card soft-peach">
+        <div class="emoji">🗺️</div>
+        <h3>3. Mapas</h3>
+        <p>Browse RGB temáticos + stretch Viviano §5.3.</p>
+      </div>
+      <div class="card soft-lilac">
+        <div class="emoji">🎯</div>
+        <h3>4. Detección</h3>
+        <p>Reglas multi-índice AND con umbrales por percentil.</p>
+      </div>
+      <div class="card soft-pink">
+        <div class="emoji">🧩</div>
+        <h3>5. Clasificación</h3>
+        <p>K-means, firmas espectrales y Random Forest supervisado.</p>
+      </div>
+      <div class="card soft-mint">
+        <div class="emoji">🔁</div>
+        <h3>6. Flujo de trabajo</h3>
+        <p>Cómo encajan mapas → detección → unidades geológicas.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- 2 -->
+  <section class="slide">
+    <div class="section-tag">Conceptos</div>
+    <h2>¿Qué es CRISM y qué mide?</h2>
+    <div class="two-col" style="margin-top:.8rem">
+      <div>
+        <p><strong>CRISM</strong> (Compact Reconnaissance Imaging Spectrometer for Mars) va a bordo del <strong>MRO</strong>. Mide radiancia reflejada en cientos de bandas VNIR+IR.</p>
+        <div class="note">La idea clave: cada mineral deja “huellas” de absorción en longitudes de onda concretas. Los índices resumen esas huellas en un número por píxel.</div>
+        <ul class="clean" style="margin-top:1rem">
+          <li>VNIR → óxidos de Fe, albedo, peak de reflectancia</li>
+          <li>IR cercano → máficos, hidratados, filosilicatos, carbonatos</li>
+          <li>Producto de trabajo del pipeline: <code>SR</code> (refined summary parameters)</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3>Ladder de productos</h3>
+        <div class="flow" style="margin-top:.8rem; flex-direction:column; align-items:stretch">
+          <div class="node">EDR / TRDR</div><div class="arrow" style="text-align:center">↓</div>
+          <div class="node">TER → MTRDR (IF)</div><div class="arrow" style="text-align:center">↓</div>
+          <div class="node">SU → <span style="color:#ff7a9a">SR</span> (~60 índices)</div><div class="arrow" style="text-align:center">↓</div>
+          <div class="node">BR browse RGB</div>
+        </div>
+        <p class="tiny" style="margin-top:.7rem">Este repo <em>no</em> recalcula BD desde I/F: consume el cubo SR oficial.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- 3 -->
+  <section class="slide">
+    <div class="section-tag">Conceptos</div>
+    <h2>Índices Viviano–Beck (2014)</h2>
+    <p class="lead">60 parámetros que cuantifican absorciones diagnósticas. Cada uno es una banda del cubo SR.</p>
+    <div style="margin-top:1rem; overflow:auto">
+      <table>
+        <thead><tr><th>Índice</th><th>Familia</th><th>Qué captura</th></tr></thead>
+        <tbody>
+          <tr><td><code>OLINDEX3</code></td><td>weighted RB</td><td>Absorción ancha ~1 μm → olivina / Fe filosilicatos</td></tr>
+          <tr><td><code>LCPINDEX2</code> / <code>HCPINDEX2</code></td><td>weighted RB</td><td>Piroxeno bajo / alto Ca</td></tr>
+          <tr><td><code>D2300</code> / <code>D2200</code></td><td>drop-off</td><td>Fe/Mg-OH o Al/Si-OH</td></tr>
+          <tr><td><code>BD1900_2</code> / <code>BD2100_2</code></td><td>band depth</td><td>H₂O ligada / sulfatos mono</td></tr>
+          <tr><td><code>BD2500H2</code>, <code>CINDEX2</code></td><td>BD / convexity</td><td>Carbonatos</td></tr>
+          <tr><td><code>BD530_2</code>, <code>SH600_2</code></td><td>BD / shoulder</td><td>Óxidos férricos / hematita</td></tr>
+          <tr><td><code>BDI1000VIS</code>, <code>RPEAK1</code></td><td>integrado / peak</td><td>Mineralogía Fe ~1 μm</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="note">Referencia: Viviano-Beck et al., JGR Planets, doi:10.1002/2014JE004627</div>
+  </section>
+
+  <!-- 4 -->
+  <section class="slide">
+    <div class="section-tag">Conceptos · caveats</div>
+    <h2>Limitaciones (léeme antes de enamorararte del mapa)</h2>
+    <div class="grid-2" style="margin-top:1rem">
+      <div class="card soft-peach">
+        <div class="emoji">⚠️</div>
+        <h3>No es abundancia</h3>
+        <p>Un índice alto ≠ “mucho mineral”. Es una medida de contraste espectral relativo al continuum.</p>
+      </div>
+      <div class="card soft-lilac">
+        <div class="emoji">🎭</div>
+        <h3>No es único</h3>
+        <p>Varios minerales pueden activar el mismo índice (ej. <code>D2300</code>: filosilicatos Fe/Mg y carbonatos Mg).</p>
+      </div>
+      <div class="card soft-mint">
+        <div class="emoji">🎚️</div>
+        <h3>Dependiente de escena</h3>
+        <p>Polvo, iluminación y ruido cambian percentiles. Umbrales fijos rara vez viajan bien entre órbitas.</p>
+      </div>
+      <div class="card soft-pink">
+        <div class="emoji">🔬</div>
+        <h3>Hay que validar</h3>
+        <p>Contrasta siempre con espectros IF, browse multi-tema y contexto geológico.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- 5 -->
+  <section class="slide">
+    <div class="section-tag">Formulaciones</div>
+    <h2>El continuum: corazón de casi todo</h2>
+    <div class="two-col" style="margin-top:.6rem">
+      <div>
+        <p>En $\lambda_C$, interpolamos el continuum entre anclas $(\lambda_S,R_S)$ y $(\lambda_L,R_L)$:</p>
+        <div class="formula">
+          $$R_C^{*} = a\,R_S + b\,R_L,\quad
+          b=\frac{\lambda_C-\lambda_S}{\lambda_L-\lambda_S},\quad
+          a=1-b$$
+        </div>
+        <p>Las reflectancias $R_\lambda$ suelen ser una <strong>mediana espectral</strong> sobre canales vecinos (más robusto al ruido).</p>
+      </div>
+      <div class="card soft-lilac">
+        <h3>Intuición cute</h3>
+        <p style="margin-top:.5rem">Imagina trazar una cuerda entre dos puntos “seguros” del espectro. Si el mineral “muerde” hacia abajo esa cuerda, hay absorción. Si sobresale, hay un hombro (shoulder).</p>
+        <div class="chip-row">
+          <span class="chip peach">ancla corta $\lambda_S$</span>
+          <span class="chip pink">centro $\lambda_C$</span>
+          <span class="chip mint">ancla larga $\lambda_L$</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 6 -->
+  <section class="slide">
+    <div class="section-tag">Formulaciones · BD / SH</div>
+    <h2>Band Depth y Shoulder Height</h2>
+    <div class="grid-2" style="margin-top:.6rem">
+      <div class="card soft-pink">
+        <h3>Band Depth (BD)</h3>
+        <div class="formula">
+          $$\mathrm{BD}(\lambda_C)=1-\frac{R_C}{R_C^{*}}=1-\frac{R_C}{a R_S+b R_L}$$
+        </div>
+        <p>Positivo ⇒ absorción bajo el continuum. Herencia de Clark &amp; Roush (1984).</p>
+        <div class="chip-row">
+          <span class="chip pink">BD530_2</span>
+          <span class="chip pink">BD1900_2</span>
+          <span class="chip pink">BD2100_2</span>
+        </div>
+      </div>
+      <div class="card soft-mint">
+        <h3>Shoulder / Band Height (SH / BH)</h3>
+        <div class="formula">
+          $$\mathrm{BH}(\lambda_C)=1-\frac{R_C^{*}}{R_C}=1-\frac{a R_S+b R_L}{R_C}$$
+        </div>
+        <p>Captura un “hombro” entre dos absorciones (p. ej. férricos en VNIR).</p>
+        <div class="chip-row">
+          <span class="chip mint">SH600_2</span>
+          <span class="chip mint">SH770</span>
+        </div>
+      </div>
+    </div>
+    <div class="note" style="margin-top:1rem"><strong>Ejemplo férrico:</strong>
+      $\mathrm{BD530\_2}=1-\dfrac{R_{530}}{a R_{614}+b R_{440}}$ ·
+      $\mathrm{SH600\_2}=1-\dfrac{a R_{533}+b R_{716}}{R_{600}}$
+    </div>
+  </section>
+
+  <!-- 7 -->
+  <section class="slide">
+    <div class="section-tag">Formulaciones · MIN / BDI / RB</div>
+    <h2>MIN, BDI y profundidades relativas</h2>
+    <div class="grid-3" style="margin-top:.6rem">
+      <div class="card">
+        <h3>MIN (dobleta)</h3>
+        <div class="formula">$$\mathrm{MIN}=\min\!\big[\mathrm{BD}_{C1},\mathrm{BD}_{C2}\big]$$</div>
+        <p>Exige <em>ambas</em> absorciones. Mejor que media geométrica (menos falsos positivos).</p>
+        <p class="tiny"><code>MIN2250</code>, <code>MIN2295_2480</code>, …</p>
+      </div>
+      <div class="card">
+        <h3>BDI (integrado)</h3>
+        <div class="formula">$$\mathrm{BDI}\approx\int_{\lambda_1}^{\lambda_2}\!(1-R_{\mathrm{norm}})\,d\lambda$$</div>
+        <p>Primero normalizas por continuum/peak; luego integras la absorción residual.</p>
+        <p class="tiny"><code>BDI1000VIS</code>, <code>BDI2000</code></p>
+      </div>
+      <div class="card">
+        <h3>Relative Band (RB)</h3>
+        <div class="formula">$$\mathrm{RB}_\lambda=\frac{R_C(\lambda)-R_\lambda}{R_C(\lambda)}$$</div>
+        <p>Profundidad relativa a un continuum lineal entre anclas fijas. Base de OLINDEX / LCP / HCP.</p>
+      </div>
+    </div>
+    <div class="card soft-peach" style="margin-top:1rem">
+      <h3>Índices ponderados (ejemplo olivina)</h3>
+      <div class="formula">
+        $$\mathrm{OLINDEX3}=\sum_i w_i\,\mathrm{RB}_{\lambda_i}\quad(\text{anclas } R_{1750},\,R_{2400})$$
+      </div>
+      <p class="tiny">Pesos tipicos hacia ~1.4 μm (ver Viviano Tabla 2). LCPINDEX2 favorece ~1.81 μm; HCPINDEX2 favorece ~2.12 μm.</p>
+    </div>
+  </section>
+
+  <!-- 8 -->
+  <section class="slide">
+    <div class="section-tag">Formulaciones · D / slopes / ratios</div>
+    <h2>Drop-off, pendientes y ratios</h2>
+    <div class="two-col" style="margin-top:.6rem">
+      <div>
+        <div class="card soft-lilac">
+          <h3>Drop-off (D2300)</h3>
+          <p style="margin:.4rem 0">Contraste continuum-normalizado a través de un borde espectral Fe/Mg-OH:</p>
+          <div class="formula" style="font-size:.85rem">
+            $$\mathrm{D2300}=1-\frac{\sum R_{22xx}/R_C}{\sum R_{21xx}/R_C}$$
+          </div>
+          <p class="tiny">Anclas típicas: $R_{1815}$, $R_{2530}$.</p>
+        </div>
+        <div class="card soft-mint" style="margin-top:.8rem">
+          <h3>Convexidad (SINDEX2 / CINDEX2)</h3>
+          <div class="formula">$$1-\frac{a R_{\mathrm{izq}}+b R_{\mathrm{der}}}{R_{\mathrm{medio}}}$$</div>
+          <p>Altura de un canal intermedio <em>sobre</em> el continuum → sulfatos / carbonatos.</p>
+        </div>
+      </div>
+      <div>
+        <div class="card soft-peach">
+          <h3>Slope &amp; ratios</h3>
+          <div class="formula">$$\mathrm{ISLOPE1}=\frac{R_{1815}-R_{2530}}{W_{2530}-W_{1815}}$$</div>
+          <div class="formula">$$\mathrm{RBR}=\frac{R_{770}}{R_{440}},\quad \mathrm{IRR2}=\frac{R_{2530}}{R_{2210}}$$</div>
+          <p>Útiles para cloruros, polvo, hielo y discriminación de pendiente IR.</p>
+        </div>
+        <div class="card soft-pink" style="margin-top:.8rem">
+          <h3>RPEAK1</h3>
+          <p>Longitud de onda del pico VNIR (fit polinomial; $dR/d\lambda=0$). Olivina ≲0.75 μm, polvo ≳0.8 μm.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 9 -->
+  <section class="slide">
+    <div class="section-tag">Formulaciones · cheatsheet</div>
+    <h2>Familias de parámetros (cheat sheet)</h2>
+    <div style="overflow:auto; margin-top:.6rem">
+      <table>
+        <thead><tr><th>Prefijo</th><th>Matemática</th><th>Uso típico</th></tr></thead>
+        <tbody>
+          <tr><td><code>R####</code></td><td>Reflectancia mediana</td><td>Albedo / canales browse</td></tr>
+          <tr><td><code>BD*</code></td><td>$1-R/R^*$</td><td>Absorciones diagnósticas</td></tr>
+          <tr><td><code>BDI*</code></td><td>Integral de absorción</td><td>Features anchos ~1–2 μm</td></tr>
+          <tr><td><code>SH*</code></td><td>$1-R^*/R$</td><td>Hombros férricos</td></tr>
+          <tr><td><code>D####</code></td><td>Drop-off continuum</td><td>Filosilicatos / carbonatos</td></tr>
+          <tr><td><code>MIN*</code></td><td>$\min$ de dos BD</td><td>Dobletas (sílice, CO₃)</td></tr>
+          <tr><td><code>*INDEX*</code></td><td>$\sum w_i\mathrm{RB}_i$</td><td>Máficos</td></tr>
+          <tr><td><code>SINDEX</code>/<code>CINDEX</code></td><td>Inverse lever</td><td>Sulfatos / carbonatos</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- 10 -->
+  <section class="slide">
+    <div class="section-tag">Mapas</div>
+    <h2>De índices continuos a imágenes lindas</h2>
+    <div class="flow" style="margin:1rem 0">
+      <div class="node">Cubo SR</div><span class="arrow">→</span>
+      <div class="node">Seleccionar bandas</div><span class="arrow">→</span>
+      <div class="node">Stretch §5.3</div><span class="arrow">→</span>
+      <div class="node">PNG / GeoTIFF</div>
+    </div>
+    <div class="grid-2">
+      <div class="card soft-pink">
+        <div class="emoji">🩶</div>
+        <h3>Mapas de índice</h3>
+        <p>Escala de grises del índice principal de cada grupo mineral (<code>mineral_groups</code>).</p>
+        <p class="tiny" style="margin-top:.4rem"><code>.../indices/*_OLINDEX3.png</code></p>
+      </div>
+      <div class="card soft-mint">
+        <div class="emoji">🎨</div>
+        <h3>Browse products RGB</h3>
+        <p>Tres índices temáticos → R, G, B. Evaluación rápida de diversidad mineralógica.</p>
+        <p class="tiny" style="margin-top:.4rem">MAF · PHY · HYD · CAR · FEM · PAL · …</p>
+      </div>
+    </div>
+    <div class="note">Config: <code>config/viviano2014.yaml</code> → <code>browse_products</code>. Código: <code>maps.py</code> + <code>stretch.py</code>.</div>
+  </section>
+
+  <!-- 11 -->
+  <section class="slide">
+    <div class="section-tag">Mapas · stretch</div>
+    <h2>Estiramiento Viviano §5.3</h2>
+    <p>Lleva valores float a uint8 sin “matarte” las detecciones débiles:</p>
+    <div class="formula">
+      $$I=\mathrm{clip}\!\left(\frac{x-v_{\min}}{v_{\max}-v_{\min}},0,1\right)\times 255$$
+    </div>
+    <div class="grid-2" style="margin-top:.8rem">
+      <div class="card soft-peach">
+        <h3>Parámetros “locales”</h3>
+        <p><code>R770</code>, <code>R600</code>, <code>SH600_2</code>, <code>IRA</code>, …</p>
+        <div class="formula">$$v_{\min}=P_{0.1},\quad v_{\max}=P_{99.9}$$</div>
+      </div>
+      <div class="card soft-lilac">
+        <h3>Resto de índices</h3>
+        <div class="formula">$$v_{\min}=0,\quad v_{\max}=\max(P_{99}^{\mathrm{global}},\,P_{99.9}^{\mathrm{local}})$$</div>
+        <p class="tiny">Nodata: −9999, 65535, no-finitos.</p>
+      </div>
+    </div>
+    <p class="tiny" style="margin-top:.8rem">Sidecar <code>.stretch.json</code> guarda $v_{\min}/v_{\max}$ absolutos para QGIS.</p>
+  </section>
+
+  <!-- 12 -->
+  <section class="slide">
+    <div class="section-tag">Mapas · browse RGB</div>
+    <h2>Browse products estrella</h2>
+    <div class="grid-3" style="margin-top:.6rem">
+      <div class="card soft-peach">
+        <h3>MAF — máficos</h3>
+        <p><code>OLINDEX3 · LCPINDEX2 · HCPINDEX2</code></p>
+        <ul class="clean" style="margin-top:.5rem;font-size:.9rem">
+          <li>Rojo → olivina / Fe ~1 μm</li>
+          <li>Verde → LCP</li>
+          <li>Azul → HCP</li>
+        </ul>
+      </div>
+      <div class="card soft-mint">
+        <h3>PHY — filosilicatos</h3>
+        <p><code>D2300 · D2200 · BD1900r2</code></p>
+        <ul class="clean" style="margin-top:.5rem;font-size:.9rem">
+          <li>Rojo → Fe/Mg-OH</li>
+          <li>Verde → Al/Si-OH</li>
+          <li>Azul → otros hidratados</li>
+        </ul>
+      </div>
+      <div class="card soft-lilac">
+        <h3>HYD — hidratados</h3>
+        <p><code>SINDEX2 · BD2100_2 · BD1900_2</code></p>
+        <ul class="clean" style="margin-top:.5rem;font-size:.9rem">
+          <li>Magenta → poli-sulfatos</li>
+          <li>Amarillo → mono-sulfatos</li>
+          <li>Azul → arcillas/CO₃</li>
+        </ul>
+      </div>
+      <div class="card soft-pink">
+        <h3>CAR — carbonatos</h3>
+        <p><code>D2300 · BD2500H2 · BD1900_2</code></p>
+        <p class="tiny" style="margin-top:.4rem">Cuidado: D2300 también responde a filosilicatos Fe/Mg.</p>
+      </div>
+      <div class="card soft-peach">
+        <h3>FEM — hierro</h3>
+        <p><code>BD530_2 · SH600_2 · BDI1000VIS</code></p>
+        <p class="tiny" style="margin-top:.4rem">Óxidos nanofásicos vs hematita cristalina.</p>
+      </div>
+      <div class="card soft-mint">
+        <h3>Más temas</h3>
+        <div class="chip-row">
+          <span class="chip">PAL</span><span class="chip">PFM</span><span class="chip">HYS</span>
+          <span class="chip">ICE</span><span class="chip">CHL</span><span class="chip">CR2</span>
+          <span class="chip">TRU</span><span class="chip">FAL</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 13 -->
+  <section class="slide">
+    <div class="section-tag">Detección</div>
+    <h2>De “bonito” a “candidato mineral”</h2>
+    <div class="flow" style="margin:1rem 0">
+      <div class="node">Índices SR</div><span class="arrow">→</span>
+      <div class="node">Condiciones AND</div><span class="arrow">→</span>
+      <div class="node">Umbral percentil / fijo</div><span class="arrow">→</span>
+      <div class="node">Máscara binaria</div>
+    </div>
+    <div class="two-col">
+      <div class="card soft-pink">
+        <h3>Lógica</h3>
+        <div class="formula" style="font-size:.88rem">
+          $$M_m=\bigwedge_k \big(x_k \;\underset{\mathrm{op}}{\gtrless}\; \tau_k\big)\;\wedge\;\mathrm{valid}$$
+        </div>
+        <p><code>op</code> = <code>gt</code> (default) o <code>lt</code>. Todas las condiciones deben cumplirse.</p>
+      </div>
+      <div class="card soft-mint">
+        <h3>Umbrales</h3>
+        <ul class="clean" style="margin-top:.5rem">
+          <li><strong>percentile</strong>: $\tau=P_p(\{x\ \mathrm{válidos}\})$ — adapta a la escena</li>
+          <li><strong>fixed</strong>: valor absoluto del índice</li>
+        </ul>
+        <div class="formula">$$\mathrm{coverage}_m=100\times\frac{\sum M_m}{\sum\mathrm{valid}}$$</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 14 -->
+  <section class="slide">
+    <div class="section-tag">Detección · reglas</div>
+    <h2>Reglas multi-índice (defaults del YAML)</h2>
+    <div style="overflow:auto; margin-top:.5rem">
+      <table>
+        <thead><tr><th>Mineral</th><th>Lógica AND</th></tr></thead>
+        <tbody>
+          <tr><td>Olivina</td><td><code>OLINDEX3</code> &gt; P92 ∧ <code>BDI1000VIS</code> &gt; P85</td></tr>
+          <tr><td>HCP</td><td><code>HCPINDEX2</code> &gt; P90 ∧ <code>LCPINDEX2</code> &lt; P70</td></tr>
+          <tr><td>LCP</td><td><code>LCPINDEX2</code> &gt; P90</td></tr>
+          <tr><td>Filosilicatos Fe/Mg</td><td><code>D2300</code> &gt; P88 ∧ <code>BD1900r2</code> &gt; P85</td></tr>
+          <tr><td>Filosilicatos Al</td><td><code>BD2210_2</code> &gt; P88 ∧ <code>BD2165</code> &gt; P85</td></tr>
+          <tr><td>Carbonato Mg</td><td><code>D2300</code> &gt; P90 ∧ <code>BD2500H2</code> &gt; P88</td></tr>
+          <tr><td>Sílice hidratada</td><td><code>MIN2250</code> &gt; P90 ∧ <code>BD2250</code> &gt; P85</td></tr>
+          <tr><td>Sulfato mono</td><td><code>BD2100_2</code> &gt; P90 ∧ <code>BD1900_2</code> &lt; P75</td></tr>
+          <tr><td>Sulfato poli</td><td><code>BD1900_2</code> &gt; P90 ∧ <code>BD2100_2</code> &gt; P85</td></tr>
+          <tr><td>Hematita</td><td><code>BD530_2</code> &gt; P92 ∧ <code>SH600_2</code> &gt; P88</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="note">Subir percentil → más estricto. Bajar → más detecciones (y más ruido).</div>
+  </section>
+
+  <!-- 15 -->
+  <section class="slide">
+    <div class="section-tag">Detección · por qué AND</div>
+    <h2>Un índice no basta (y por eso es cute)</h2>
+    <div class="grid-2" style="margin-top:.8rem">
+      <div class="card soft-peach">
+        <h3>Ejemplo: olivina</h3>
+        <p><code>OLINDEX3</code> solo puede iluminar también filosilicatos Fe. Pedir además <code>BDI1000VIS</code> alto refuerza la absorción ~1 μm.</p>
+      </div>
+      <div class="card soft-lilac">
+        <h3>Ejemplo: HCP vs LCP</h3>
+        <p>Exigir HCP alto <em>y</em> LCP bajo (P70) reduce confusión entre piroxenos.</p>
+      </div>
+      <div class="card soft-mint">
+        <h3>Ejemplo: sulfatos</h3>
+        <p>Mono: BD2100 alto + BD1900 bajo. Poli: BD1900 alto + BD2100 alto. La lógica separa familias.</p>
+      </div>
+      <div class="card soft-pink">
+        <h3>mineral_groups</h3>
+        <p>Cada mineral tiene índice <strong>primary</strong> + <strong>secondary</strong> + browse de QA visual (MAF, PHY, …).</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- 16 -->
+  <section class="slide">
+    <div class="section-tag">Clasificación</div>
+    <h2>Tres caminos hacia unidades geológicas</h2>
+    <div class="grid-3" style="margin-top:1rem">
+      <div class="card soft-mint">
+        <div class="emoji">🔍</div>
+        <h3>kmeans</h3>
+        <p>Sin etiquetas. Descubre clusters espectrales. Ideal para exploración.</p>
+      </div>
+      <div class="card soft-peach">
+        <div class="emoji">📜</div>
+        <h3>signature</h3>
+        <p>Compara contra firmas high/low predefinidas en el YAML.</p>
+      </div>
+      <div class="card soft-lilac">
+        <div class="emoji">🌳</div>
+        <h3>supervised</h3>
+        <p>Random Forest con píxeles/polígonos etiquetados (CSV o GeoJSON).</p>
+      </div>
+    </div>
+    <div class="card" style="margin-top:1rem">
+      <h3>Espacio de features (default)</h3>
+      <div class="chip-row">
+        <span class="chip lilac">OLINDEX3</span>
+        <span class="chip lilac">LCPINDEX2</span>
+        <span class="chip lilac">HCPINDEX2</span>
+        <span class="chip mint">D2300</span>
+        <span class="chip mint">D2200</span>
+        <span class="chip mint">BD1900r2</span>
+        <span class="chip peach">BD2100_2</span>
+        <span class="chip peach">SINDEX2</span>
+        <span class="chip pink">BD2500H2</span>
+        <span class="chip pink">BDI1000VIS</span>
+        <span class="chip">R770</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- 17 -->
+  <section class="slide">
+    <div class="section-tag">Clasificación · k-means</div>
+    <h2>K-means paso a paso</h2>
+    <div class="two-col" style="margin-top:.6rem">
+      <div>
+        <ol style="display:grid;gap:.55rem;padding-left:1.2rem">
+          <li>Extrae el vector $\mathbf{x}$ de índices SR por píxel.</li>
+          <li>Muestrea ≤ 50 000 píxeles válidos.</li>
+          <li>Estandariza: $\mathbf{z}=(\mathbf{x}-\boldsymbol{\mu})/\boldsymbol{\sigma}$.</li>
+          <li>K-means con $K$ clusters (<code>n_init=10</code>).</li>
+          <li>Predice etiqueta en todos los píxeles válidos.</li>
+        </ol>
+        <div class="note">Salida: IDs $0\ldots K-1$. La interpretación es tuya (browse + detección).</div>
+      </div>
+      <div class="card soft-mint">
+        <h3>Cuándo usarlo</h3>
+        <ul class="clean" style="margin-top:.5rem">
+          <li>Primera pasada por una escena nueva</li>
+          <li>Buscar unidades que no imaginabas</li>
+          <li>Antes de etiquetar para RF</li>
+        </ul>
+        <p class="tiny" style="margin-top:.8rem">CLI: <code>--method kmeans --n-clusters 5</code></p>
+      </div>
+    </div>
+  </section>
+
+  <!-- 18 -->
+  <section class="slide">
+    <div class="section-tag">Clasificación · firmas</div>
+    <h2>Score por firmas espectrales</h2>
+    <p>Para cada unidad $u$ con índices “altos” $H_u$ y “bajos” $L_u$:</p>
+    <div class="formula">
+      $$S_u=\sum_{f\in H_u}\frac{x_f}{P_{90}(x_f)}-\sum_{f\in L_u}\frac{x_f}{P_{90}(x_f)}$$
+    </div>
+    <div class="formula">
+      $$\hat{u}=\arg\max_u S_u\quad\text{si }\max S_u>0\text{ y el píxel es válido}$$
+    </div>
+    <div class="grid-2" style="margin-top:.8rem">
+      <div class="card soft-peach">
+        <h3>Ejemplos en config</h3>
+        <ul class="clean" style="margin-top:.4rem;font-size:.92rem">
+          <li><strong>Suelo basáltico</strong> — high: R770, BDI1000VIS</li>
+          <li><strong>Olivina-rich</strong> — high: OLINDEX3, BDI1000VIS</li>
+          <li><strong>Arcillosa</strong> — high: D2300, D2200, BD1900r2</li>
+          <li><strong>Sulfatada / carbonatada</strong> — ver YAML</li>
+        </ul>
+      </div>
+      <div class="card soft-lilac">
+        <h3>Limitación</h3>
+        <p>Es heurístico y asigna una sola clase por píxel. Valida con browse y geología; no confundas score con probabilidad bayesiana.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- 19 -->
+  <section class="slide">
+    <div class="section-tag">Clasificación · supervisada</div>
+    <h2>Random Forest con etiquetas reales</h2>
+    <div class="grid-2" style="margin-top:.6rem">
+      <div class="card soft-pink">
+        <h3>Entradas de entrenamiento</h3>
+        <p><strong>CSV</strong> <code>row,col,unit</code> o <strong>GeoJSON/Shapefile</strong> con atributo de clase.</p>
+        <ul class="clean" style="margin-top:.5rem">
+          <li>Split 75/25 train/test</li>
+          <li><code>StandardScaler</code></li>
+          <li>RF con 200 árboles</li>
+          <li>Guarda reporte + modelo <code>.joblib</code></li>
+        </ul>
+      </div>
+      <div class="card soft-mint">
+        <h3>Tips prácticos</h3>
+        <ul class="clean" style="margin-top:.5rem">
+          <li>Etiqueta sobre el mismo CRS del producto</li>
+          <li>Muestrea varias litologías / contextos</li>
+          <li>Revisa confusión entre unidades similares</li>
+          <li>Las mezclas espectrales se fuerzan a una clase</li>
+        </ul>
+      </div>
+    </div>
+    <div class="note">Plantillas: <code>examples/training_pixels.example.csv</code> · <code>examples/training_polygons.example.geojson</code></div>
+  </section>
+
+  <!-- 20 -->
+  <section class="slide">
+    <div class="section-tag">Flujo</div>
+    <h2>Cómo encajan las tres capas</h2>
+    <div class="card" style="margin-top:.6rem">
+      <div class="flow" style="flex-direction:column;align-items:stretch;gap:.35rem">
+        <div class="node" style="text-align:center;background:linear-gradient(90deg,#ffe8ef,#fff)">🗺️ Mapas — visualizan índices (continuo / RGB)</div>
+        <div class="arrow" style="text-align:center">↓ confirman candidatos</div>
+        <div class="node" style="text-align:center;background:linear-gradient(90deg,#e8faf8,#fff)">🎯 Detección — máscaras binarias multi-índice</div>
+        <div class="arrow" style="text-align:center">↓ agrupan en unidades</div>
+        <div class="node" style="text-align:center;background:linear-gradient(90deg,#eeeaff,#fff)">🧩 Clasificación — clusters / firmas / RF</div>
+      </div>
+    </div>
+    <div class="grid-3" style="margin-top:1rem">
+      <div class="card"><h3>Misma materia prima</h3><p>Los ~60 índices SR alimentan las tres capas.</p></div>
+      <div class="card"><h3>Distinto output</h3><p>Continuo → binario → etiqueta de unidad.</p></div>
+      <div class="card"><h3>Loop recomendado</h3><p>Browse → detect → k-means → etiquetar → RF → validar IF.</p></div>
+    </div>
+  </section>
+
+  <!-- 21 -->
+  <section class="slide">
+    <div class="section-tag">Resumen</div>
+    <h2>Takeaways para llevar en el bolsillo</h2>
+    <div class="grid-2" style="margin-top:.8rem">
+      <div class="card soft-pink">
+        <ul class="clean">
+          <li>SR = índices precomputados Viviano 2014</li>
+          <li>BD/SH/BDI/MIN/D/RB = lenguaje de absorciones</li>
+          <li>Browse RGB = mirada rápida temática</li>
+        </ul>
+      </div>
+      <div class="card soft-mint">
+        <ul class="clean">
+          <li>Detección = AND + percentiles de escena</li>
+          <li>Clasificación = mismo feature space, tres métodos</li>
+          <li>Alto índice ≠ abundancia; valida siempre</li>
+        </ul>
+      </div>
+    </div>
+    <div class="card soft-lilac" style="margin-top:1rem;text-align:center">
+      <h2 style="margin:0">¡A mapear Marte con cariño! 🩷🛰️</h2>
+      <p class="muted" style="margin-top:.5rem">Docs: <code>docs/01</code> · <code>05</code> · <code>06</code> · <code>07</code> · Config: <code>viviano2014.yaml</code></p>
+    </div>
+  </section>
+
+  <!-- 22 TOC -->
+  <section class="slide" id="toc-slide">
+    <div class="section-tag">Índice</div>
+    <h2>Salta a donde quieras</h2>
+    <div class="grid-3" style="margin-top:1rem" id="toc"></div>
+  </section>
+
+</div>
+
+<div class="footer-bar">
+  <div id="slideLabel">1 / 1</div>
+  <div class="progress"><i id="bar"></i></div>
+  <div class="nav-btns">
+    <button class="ghost" id="prevBtn" title="Anterior">←</button>
+    <button class="ghost" id="tocBtn" title="Índice">☰</button>
+    <button id="nextBtn" title="Siguiente">→</button>
+  </div>
+</div>
+
+<script>
+  const slides = [...document.querySelectorAll('.slide')];
+  let i = 0;
+  const titles = [
+    "Portada",
+    "Roadmap",
+    "CRISM & productos",
+    "Índices Viviano",
+    "Limitaciones",
+    "Continuum",
+    "BD & SH",
+    "MIN · BDI · RB",
+    "D · slopes · ratios",
+    "Cheat sheet",
+    "Mapas",
+    "Stretch §5.3",
+    "Browse RGB",
+    "Detección",
+    "Reglas YAML",
+    "Por qué AND",
+    "Clasificación",
+    "K-means",
+    "Firmas",
+    "Random Forest",
+    "Flujo integrado",
+    "Takeaways",
+    "Índice"
+  ];
+
+  function show(n) {
+    i = (n + slides.length) % slides.length;
+    slides.forEach((s, k) => s.classList.toggle('active', k === i));
+    document.getElementById('slideLabel').textContent = `${i+1} / ${slides.length} · ${titles[i] || ''}`;
+    document.getElementById('bar').style.width = `${((i+1)/slides.length)*100}%`;
+    history.replaceState(null, '', `#${i}`);
+  }
+
+  document.getElementById('prevBtn').onclick = () => show(i-1);
+  document.getElementById('nextBtn').onclick = () => show(i+1);
+  document.getElementById('tocBtn').onclick = () => show(slides.length-1);
+
+  window.addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowRight' || e.key === ' ' || e.key === 'PageDown') { e.preventDefault(); show(i+1); }
+    if (e.key === 'ArrowLeft' || e.key === 'PageUp') { e.preventDefault(); show(i-1); }
+    if (e.key === 'Home') show(0);
+    if (e.key === 'End') show(slides.length-1);
+    if (e.key === 'Escape') show(slides.length-1);
+  });
+
+  const toc = document.getElementById('toc');
+  titles.forEach((t, idx) => {
+    if (idx === titles.length-1) return;
+    const a = document.createElement('button');
+    a.className = 'ghost';
+    a.style.width = '100%';
+    a.style.textAlign = 'left';
+    a.style.borderRadius = '14px';
+    a.style.padding = '.7rem .9rem';
+    a.style.marginBottom = '.2rem';
+    a.textContent = `${idx+1}. ${t}`;
+    a.onclick = () => show(idx);
+    const wrap = document.createElement('div');
+    wrap.appendChild(a);
+    toc.appendChild(wrap);
+  });
+
+  const start = parseInt(location.hash.replace('#',''), 10);
+  show(Number.isFinite(start) ? start : 0);
+</script>
+</body>
+</html>
