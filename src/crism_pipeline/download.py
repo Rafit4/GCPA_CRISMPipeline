@@ -26,32 +26,9 @@ _CHUNK_SIZE = 1 << 20  # 1 MiB
 
 # (nombre_archivo, fracción 0–1, mensaje)
 ProgressCallback = Callable[[str, float, str], None]
-# True = el usuario pidió cancelar
-CancelCheck = Callable[[], bool]
 
-
-class DownloadCancelled(Exception):
-    """La descarga se detuvo a petición del usuario."""
-
-
-DataKind = Literal["sr", "if"]
-DataSelection = Literal["sr", "if", "both"]
-
-
-def _raise_if_cancelled(cancel_check: CancelCheck | None) -> None:
-    if cancel_check is not None and cancel_check():
-        raise DownloadCancelled("Descarga cancelada por el usuario")
-
-
-def _sleep_interruptible(seconds: float, cancel_check: CancelCheck | None) -> None:
-    """Espera en trozos cortos para reaccionar a cancelación."""
-    end = time.monotonic() + seconds
-    while True:
-        _raise_if_cancelled(cancel_check)
-        remaining = end - time.monotonic()
-        if remaining <= 0:
-            return
-        time.sleep(min(0.25, remaining))
+DataKind = Literal["sr", "if", "ter"]
+DataSelection = Literal["sr", "if", "both", "ter"]
 
 _PRODUCT_ID_RE = re.compile(
     r"^(?:frt|hrl|hrs|ato|hsp|msw|msp|msv|vvv)\d{8}_[0-9a-z]+_[a-z0-9]+_mtr3$",
@@ -60,30 +37,34 @@ _PRODUCT_ID_RE = re.compile(
 
 
 def parse_data_selection(selection: str | Iterable[str]) -> frozenset[DataKind]:
-    """Normaliza ``sr`` / ``if`` / ``both`` (o iterable) a un conjunto de tipos."""
+    """Normaliza ``sr`` / ``if`` / ``both`` / ``ter`` (o iterable) a un conjunto de tipos."""
     if isinstance(selection, str):
         key = selection.strip().lower()
         if key == "both":
             return frozenset({"sr", "if"})
-        if key in {"sr", "if"}:
+        if key in {"sr", "if", "ter"}:
             return frozenset({key})  # type: ignore[arg-type]
-        raise ValueError(f"Tipo de dato inválido: {selection!r} (usa sr, if o both)")
+        raise ValueError(f"Tipo de dato inválido: {selection!r} (usa sr, if, both o ter)")
     kinds: set[str] = set()
     for item in selection:
         kinds |= parse_data_selection(str(item))
     if not kinds:
-        raise ValueError("Debe indicar al menos un tipo: sr y/o if")
-    bad = kinds - {"sr", "if"}
+        raise ValueError("Debe indicar al menos un tipo: sr, if y/o ter")
+    bad = kinds - {"sr", "if", "ter"}
     if bad:
         raise ValueError(f"Tipos de dato inválidos: {sorted(bad)}")
+    if "ter" in kinds and len(kinds) > 1:
+        raise ValueError("No mezcles 'ter' con 'sr'/'if' en la misma descarga")
     return frozenset(kinds)  # type: ignore[arg-type]
 
 
 def _is_wanted_file(filename: str, kinds: frozenset[DataKind]) -> bool:
-    """True si el archivo es IMG/HDR/LBL SR y/o IF según ``kinds``."""
+    """True si el archivo es IMG/HDR/LBL SR/IF (MTRDR) o TER según ``kinds``."""
     name = filename.lower()
     if not name.endswith((".img", ".hdr", ".lbl")):
         return False
+    if "ter" in kinds:
+        return "ter3" in name
     if "mtr3" not in name:
         return False
     is_sr = "_sr" in name
@@ -171,7 +152,7 @@ def parse_ids_file(path: Path) -> list[str]:
     return ids
 
 
-def _build_query_url(**params: str | int) -> str:
+def _build_query_url(*, product_type: str, **params: str | int) -> str:
     cfg = pipeline_config()["ode"]
     base = cfg["base_url"]
     query = {
@@ -181,7 +162,7 @@ def _build_query_url(**params: str | int) -> str:
         "output": "XML",
         "IHID": cfg["ihid"],
         "IID": cfg["iid"],
-        "PT": cfg["pt"],
+        "PT": product_type,
     }
     query.update({k: str(v) for k, v in params.items() if v is not None})
     return f"{base}?{urllib.parse.urlencode(query)}"
@@ -189,6 +170,7 @@ def _build_query_url(**params: str | int) -> str:
 
 def query_products(
     *,
+    product_type: str,
     pdsid: str | None = None,
     westernlon: float | None = None,
     easternlon: float | None = None,
@@ -210,7 +192,7 @@ def query_products(
                 "loc": "f",
             }
         )
-    url = _build_query_url(**params)
+    url = _build_query_url(product_type=product_type, **params)
     with urllib.request.urlopen(url, timeout=120) as resp:
         return ET.fromstring(resp.read())
 
@@ -232,7 +214,6 @@ def _download_file(
     *,
     retries: int = _DOWNLOAD_RETRIES,
     on_progress: ProgressCallback | None = None,
-    cancel_check: CancelCheck | None = None,
 ) -> Path:
     """Descarga con reintentos, reanudación (Range) y verificación de tamaño."""
     dest.parent.mkdir(parents=True, exist_ok=True)
@@ -246,7 +227,6 @@ def _download_file(
         on_progress(dest.name, min(frac, 1.0), msg or dest.name)
 
     for attempt in range(1, retries + 1):
-        _raise_if_cancelled(cancel_check)
         try:
             existing = dest.stat().st_size if dest.exists() else 0
             if expected is not None and existing == expected and existing > 0:
@@ -288,7 +268,6 @@ def _download_file(
                     leave=False,
                 ) as bar:
                     while True:
-                        _raise_if_cancelled(cancel_check)
                         chunk = resp.read(_CHUNK_SIZE)
                         if not chunk:
                             break
@@ -308,8 +287,6 @@ def _download_file(
             _report(final_size, final_size if expected is None else expected, f"Listo: {dest.name}")
             return dest
 
-        except DownloadCancelled:
-            raise
         except (
             urllib.error.URLError,
             urllib.error.HTTPError,
@@ -319,7 +296,7 @@ def _download_file(
             ConnectionError,
         ) as exc:
             last_err = exc
-            _sleep_interruptible(_RETRY_SLEEP_S * attempt, cancel_check)
+            time.sleep(_RETRY_SLEEP_S * attempt)
 
     assert last_err is not None
     raise last_err
@@ -333,18 +310,17 @@ def download_scene(
     limit: int = 100,
     max_products: int | None = None,
     on_progress: ProgressCallback | None = None,
-    cancel_check: CancelCheck | None = None,
     data: DataSelection | Iterable[str] = "sr",
 ) -> list[Path]:
     """Descarga archivos SR y/o IF (IMG/HDR/LBL) para productos MTRDR."""
     kinds = parse_data_selection(data)
+    product_type = "TER" if "ter" in kinds else pipeline_config()["ode"]["pt"]
     out_dir.mkdir(parents=True, exist_ok=True)
     downloaded: list[Path] = []
     offset = 0
     products_done = 0
 
     while True:
-        _raise_if_cancelled(cancel_check)
         kwargs: dict = {"limit": limit, "offset": offset}
         if pdsid:
             kwargs["pdsid"] = pdsid
@@ -360,13 +336,12 @@ def download_scene(
         else:
             raise ValueError("Debe indicar pdsid o bbox")
 
-        root = query_products(**kwargs)
+        root = query_products(product_type=product_type, **kwargs)
         products = root.findall(".//Product")
         if not products:
             break
 
         for product in products:
-            _raise_if_cancelled(cancel_check)
             pid = product.findtext("pdsid", "unknown")
             product_dir = out_dir / pid
             product_dir.mkdir(parents=True, exist_ok=True)
@@ -377,9 +352,7 @@ def download_scene(
                 if not url or not _is_wanted_file(fname, kinds):
                     continue
                 dest = product_dir / fname
-                _download_file(
-                    url, dest, on_progress=on_progress, cancel_check=cancel_check
-                )
+                _download_file(url, dest, on_progress=on_progress)
                 downloaded.append(dest)
 
             products_done += 1
@@ -397,19 +370,15 @@ def download_batch(
     product_ids: list[str],
     out_dir: Path,
     *,
-    max_products: int | None = None,
     on_progress: ProgressCallback | None = None,
-    cancel_check: CancelCheck | None = None,
     data: DataSelection | Iterable[str] = "sr",
 ) -> list[Path]:
     """Descarga SR y/o IF para una lista explícita de Product IDs."""
     kinds = parse_data_selection(data)
     label = "+".join(sorted(kinds)).upper()
-    ids = product_ids[:max_products] if max_products else product_ids
     all_files: list[Path] = []
-    n = len(ids)
-    for i, pid in enumerate(tqdm(ids, desc=f"Descargando {label}"), start=1):
-        _raise_if_cancelled(cancel_check)
+    n = len(product_ids)
+    for i, pid in enumerate(tqdm(product_ids, desc=f"Descargando {label}"), start=1):
         if on_progress:
             on_progress(pid, (i - 1) / max(n, 1), f"Escena {i}/{n}: {pid} ({label})")
 
@@ -426,7 +395,6 @@ def download_batch(
             limit=1,
             max_products=1,
             on_progress=_file_progress if on_progress else None,
-            cancel_check=cancel_check,
             data=kinds,
         )
         all_files.extend(files)
