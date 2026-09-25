@@ -10,7 +10,7 @@ from .config import resolve_path
 
 
 def _add_download(sub: argparse._SubParsersAction) -> None:
-    p = sub.add_parser("download", help="Descargar cubos SR y/o IF desde ODE")
+    p = sub.add_parser("download", help="Descargar cubos SR y/o IF (MTRDR o TER) desde ODE")
     g = p.add_mutually_exclusive_group(required=True)
     g.add_argument("--pdsid", help="Product ID o patrón con *")
     g.add_argument("--bbox", nargs=4, type=float, metavar=("W", "E", "S", "N"))
@@ -26,6 +26,12 @@ def _add_download(sub: argparse._SubParsersAction) -> None:
         choices=["sr", "if", "both"],
         default="sr",
         help="Qué descargar: sr (índices), if (cubo I/F) o both (default: sr)",
+    )
+    p.add_argument(
+        "--product",
+        choices=["mtrdr", "ter"],
+        default="mtrdr",
+        help="Producto ODE: mtrdr (mapa-proyectado, default) o ter (espacio de sensor)",
     )
 
 
@@ -164,16 +170,26 @@ def cmd_download(args: argparse.Namespace) -> int:
         ids = parse_ids_file(args.ids_file)
         if not ids:
             raise SystemExit(f"No se encontraron Product IDs en {args.ids_file}")
-        download_batch(ids, out, max_products=args.max_products, data=data)
+        download_batch(
+            ids, out, max_products=args.max_products, data=data, product=args.product
+        )
     elif args.pdsid:
         download_scene(
-            pdsid=args.pdsid, out_dir=out, max_products=args.max_products, data=data
+            pdsid=args.pdsid,
+            out_dir=out,
+            max_products=args.max_products,
+            data=data,
+            product=args.product,
         )
     else:
         download_scene(
-            bbox=tuple(args.bbox), out_dir=out, max_products=args.max_products, data=data
+            bbox=tuple(args.bbox),
+            out_dir=out,
+            max_products=args.max_products,
+            data=data,
+            product=args.product,
         )
-    print(f"Descarga completada en {out} (datos: {data})")
+    print(f"Descarga completada en {out} (producto: {args.product}, datos: {data})")
     return 0
 
 

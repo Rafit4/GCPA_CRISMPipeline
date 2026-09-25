@@ -6,12 +6,14 @@ Los productos CRISM MTRDR se catalogan en el [Orbital Data Explorer (ODE)](https
 
 ## 3.2 Qué se descarga
 
-Por cada observación MTRDR puedes elegir qué productos bajar (`--data`):
+Elige el producto (`--product`) y, dentro de ese producto, qué archivos bajar (`--data`):
 
 | Opción | Archivos | Uso |
 |--------|----------|-----|
-| `sr` (default) | `*_SR*J_MTR3.{IMG,HDR,LBL}` | Índices Viviano (pipeline maps/detect/classify) |
-| `if` | `*_IF*J_MTR3.{IMG,HDR,LBL}` | Cubo I/F hiperespectral (validación espectral; mucho más pesado) |
+| `--product mtrdr` (default) | `*_SR` / `*_IF` `*J_MTR3.{IMG,HDR,LBL}` | Mapa-proyectado. El pipeline usa el SR |
+| `--product ter` | `*_SR` / `*_IF` `*J_TER3.{IMG,HDR,LBL}` y el PNG compuesto del IF | Mismos IF/SR, en espacio de sensor |
+| `sr` (default) | Solo índices SR del producto elegido | Mapas, detección y clasificación (con MTRDR) |
+| `if` | Solo cubo I/F del producto elegido | Validación espectral; mucho más pesado |
 | `both` | SR + IF | Ambos en el mismo directorio de producto |
 
 Los archivos se organizan en `data/raw/<product_id>/`.
@@ -33,6 +35,7 @@ Exporta los resultados desde ODE Map Search y pásalos directo al pipeline:
 python -m crism_pipeline download --ids-file SearchResults.txt
 python -m crism_pipeline download --ids-file SearchResults.txt --data both
 python -m crism_pipeline download --ids-file SearchResults.txt --data if
+python -m crism_pipeline download --ids-file SearchResults.txt --product ter --data both
 ```
 
 El parser lee la columna **PRODUCT ID** del CSV de ODE. También acepta una lista simple (un ID por línea).

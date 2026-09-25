@@ -54,7 +54,8 @@ El flujo principal trabaja con **ENVI** (`.img` / `.hdr`) en `data/raw`. No hace
 - **SearchResults / IDs**: CSV de ODE o un ID por línea.
 - **Product ID**: un `pdsid` o patrón con `*`.
 - **Bounding box**: W E S N en grados.
-- **Datos**: solo SR, solo IF, o ambos (`--data sr|if|both`).
+- **Producto**: MTRDR (mapa-proyectado, default) o TER (espacio de sensor). Es una u otra (`--product mtrdr|ter`).
+- **Datos**: solo SR, solo IF, o ambos, del producto elegido (`--data sr|if|both`). TER incluye además el PNG compuesto del IF.
 - La barra muestra el **% del archivo actual** y el avance entre escenas (`[2/6] …`).
 - Si la red se corta, puedes **volver a lanzar**: reanuda lo incompleto.
 

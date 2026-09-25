@@ -1017,6 +1017,24 @@ class CrismApp(ctk.CTk):
         )
         self.dl_out.pack(fill="x", pady=6)
 
+        prod_row = ctk.CTkFrame(t, fg_color="transparent")
+        prod_row.pack(fill="x", pady=(6, 2))
+        ctk.CTkLabel(
+            prod_row, text="Producto", width=110, anchor="w", text_color=COLORS["muted"]
+        ).pack(side="left")
+        self.dl_product = ctk.StringVar(value="mtrdr")
+        for val, text in (
+            ("mtrdr", "MTRDR (mapa-proyectado)"),
+            ("ter", "TER (espacio de sensor)"),
+        ):
+            ctk.CTkRadioButton(
+                prod_row,
+                text=text,
+                variable=self.dl_product,
+                value=val,
+                command=self._sync_dl_cli,
+            ).pack(side="left", padx=(0, 14))
+
         data_row = ctk.CTkFrame(t, fg_color="transparent")
         data_row.pack(fill="x", pady=6)
         ctk.CTkLabel(
@@ -1037,7 +1055,12 @@ class CrismApp(ctk.CTk):
             ).pack(side="left", padx=(0, 12))
         ctk.CTkLabel(
             t,
-            text="IF es el cubo hiperespectral (mucho más pesado). El pipeline de mapas/detección usa SR.",
+            text=(
+                "Elige MTRDR o TER, y dentro de ese producto SR, IF o ambos. "
+                "IF es el cubo hiperespectral (mucho más pesado). "
+                "El pipeline de mapas/detección usa SR MTRDR. "
+                "TER incluye además el PNG compuesto del IF."
+            ),
             text_color=COLORS["muted"],
             wraplength=720,
             justify="left",
@@ -1097,6 +1120,8 @@ class CrismApp(ctk.CTk):
         data = self.dl_data.get()
         if data != "sr":
             parts += ["--data", data]
+        if self.dl_product.get() != "mtrdr":
+            parts += ["--product", self.dl_product.get()]
         if self.dl_out.var.get() and Path(self.dl_out.var.get()) != resolve_path("raw"):
             parts += ["--out", _q(self.dl_out.var.get())]
         if self.dl_max.get().strip():
@@ -1121,13 +1146,14 @@ class CrismApp(ctk.CTk):
         out = self.dl_out.get()
         max_p = int(self.dl_max.get()) if self.dl_max.get().strip() else None
         data = self.dl_data.get()
+        product = self.dl_product.get()
         on_prog = self.worker.report_progress
         cancel_check = self.worker.cancelled
 
         def job() -> None:
             from .download import download_batch, download_scene, parse_ids_file
 
-            self.worker.log(f"Tipo de datos: {data.upper()}\n")
+            self.worker.log(f"Producto: {product.upper()} · datos: {data.upper()}\n")
             if mode == "ids_file":
                 ids = parse_ids_file(self.dl_ids_file.get())
                 if not ids:
@@ -1145,6 +1171,7 @@ class CrismApp(ctk.CTk):
                     on_progress=on_prog,
                     cancel_check=cancel_check,
                     data=data,
+                    product=product,
                 )
             elif mode == "pdsid":
                 pdsid = self.dl_pdsid.get().strip()
@@ -1157,6 +1184,7 @@ class CrismApp(ctk.CTk):
                     on_progress=on_prog,
                     cancel_check=cancel_check,
                     data=data,
+                    product=product,
                 )
             else:
                 try:
@@ -1170,6 +1198,7 @@ class CrismApp(ctk.CTk):
                     on_progress=on_prog,
                     cancel_check=cancel_check,
                     data=data,
+                    product=product,
                 )
             self.worker.log(f"Archivos: {len(paths)} → {out}\n")
 

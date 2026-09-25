@@ -1,4 +1,4 @@
-"""Descarga de productos CRISM MTRDR (SR / IF) desde la API REST de ODE."""
+"""Descarga de productos CRISM MTRDR y TER (SR / IF) desde la API REST de ODE."""
 
 from __future__ import annotations
 
@@ -36,6 +36,7 @@ class DownloadCancelled(Exception):
 
 DataKind = Literal["sr", "if"]
 DataSelection = Literal["sr", "if", "both"]
+ProductKind = Literal["mtrdr", "ter"]
 
 
 def _raise_if_cancelled(cancel_check: CancelCheck | None) -> None:
@@ -79,20 +80,74 @@ def parse_data_selection(selection: str | Iterable[str]) -> frozenset[DataKind]:
     return frozenset(kinds)  # type: ignore[arg-type]
 
 
+def _matches_kind(filename: str, kinds: frozenset[DataKind]) -> tuple[bool, bool]:
+    """Devuelve ``(pedido, es_if_o_sr)`` según el prefijo ``_IF`` / ``_SR`` del nombre."""
+    name = filename.lower()
+    is_sr = "_sr" in name
+    is_if = "_if" in name and not is_sr
+    wanted = (is_sr and "sr" in kinds) or (is_if and "if" in kinds)
+    return wanted, is_sr or is_if
+
+
 def _is_wanted_file(filename: str, kinds: frozenset[DataKind]) -> bool:
-    """True si el archivo es IMG/HDR/LBL SR y/o IF según ``kinds``."""
+    """True si el archivo es IMG/HDR/LBL MTRDR SR y/o IF según ``kinds``."""
     name = filename.lower()
     if not name.endswith((".img", ".hdr", ".lbl")):
         return False
     if "mtr3" not in name:
         return False
-    is_sr = "_sr" in name
-    is_if = "_if" in name and not is_sr
-    if is_sr and "sr" in kinds:
-        return True
-    if is_if and "if" in kinds:
-        return True
-    return False
+    wanted, _ = _matches_kind(filename, kinds)
+    return wanted
+
+
+def _is_ter_image(filename: str, kinds: frozenset[DataKind]) -> bool:
+    """True si el archivo es imagen TER (IMG/HDR/LBL/PNG) IF y/o SR."""
+    name = filename.lower()
+    if "ter" not in name:
+        return False
+    if not name.endswith((".img", ".hdr", ".lbl", ".png")):
+        return False
+    wanted, _ = _matches_kind(filename, kinds)
+    return wanted
+
+
+def ter_pdsid_pattern(pdsid: str) -> str:
+    """Convierte un Product ID MTRDR (o patrón) en la consulta ODE del TER asociado."""
+    text = pdsid.strip()
+    if re.search(r"_ter\d", text, re.IGNORECASE):
+        return text
+    swapped = re.sub(r"_mtr\d+", "_TER*", text, count=1, flags=re.IGNORECASE)
+    if swapped != text:
+        return swapped
+    if "*" in text:
+        return text
+    return f"{text}*"
+
+
+def mtrdr_pdsid_pattern(pdsid: str) -> str:
+    """Convierte un Product ID TER en la consulta ODE del MTRDR asociado."""
+    text = pdsid.strip()
+    if re.search(r"_mtr\d", text, re.IGNORECASE):
+        return text
+    swapped = re.sub(r"_ter\d+", "_MTR*", text, count=1, flags=re.IGNORECASE)
+    if swapped != text:
+        return swapped
+    return text
+
+
+def parse_product(product: str) -> ProductKind:
+    key = product.strip().lower()
+    if key in {"mtrdr", "ter"}:
+        return key  # type: ignore[return-value]
+    raise ValueError(f"Producto inválido: {product!r} (usa mtrdr o ter)")
+
+
+def _query_pdsid(pdsid: str | None, product: ProductKind) -> str | None:
+    if not pdsid:
+        return None
+    if product == "ter":
+        return ter_pdsid_pattern(pdsid)
+    return mtrdr_pdsid_pattern(pdsid)
 
 
 # Compatibilidad
@@ -196,8 +251,11 @@ def query_products(
     maxlat: float | None = None,
     limit: int = 100,
     offset: int = 0,
+    pt: str | None = None,
 ) -> ET.Element:
     params: dict[str, str | int] = {"limit": limit, "offset": offset}
+    if pt:
+        params["PT"] = pt
     if pdsid:
         params["pdsid"] = pdsid
     if all(v is not None for v in (westernlon, easternlon, minlat, maxlat)):
@@ -325,7 +383,7 @@ def _download_file(
     raise last_err
 
 
-def download_scene(
+def _download_catalog(
     *,
     pdsid: str | None = None,
     bbox: tuple[float, float, float, float] | None = None,
@@ -334,18 +392,21 @@ def download_scene(
     max_products: int | None = None,
     on_progress: ProgressCallback | None = None,
     cancel_check: CancelCheck | None = None,
-    data: DataSelection | Iterable[str] = "sr",
-) -> list[Path]:
-    """Descarga archivos SR y/o IF (IMG/HDR/LBL) para productos MTRDR."""
-    kinds = parse_data_selection(data)
+    pt: str | None = None,
+    wanted: Callable[[str], bool],
+) -> tuple[list[Path], list[str]]:
+    """Descarga archivos que pasan ``wanted`` y devuelve rutas y Product IDs visitados."""
     out_dir.mkdir(parents=True, exist_ok=True)
     downloaded: list[Path] = []
+    product_ids: list[str] = []
     offset = 0
     products_done = 0
 
     while True:
         _raise_if_cancelled(cancel_check)
         kwargs: dict = {"limit": limit, "offset": offset}
+        if pt:
+            kwargs["pt"] = pt
         if pdsid:
             kwargs["pdsid"] = pdsid
         elif bbox:
@@ -368,14 +429,15 @@ def download_scene(
         for product in products:
             _raise_if_cancelled(cancel_check)
             pid = product.findtext("pdsid", "unknown")
+            product_ids.append(pid)
             product_dir = out_dir / pid
-            product_dir.mkdir(parents=True, exist_ok=True)
 
             for pf in product.findall(".//Product_file"):
                 url = pf.findtext("URL")
                 fname = pf.findtext("FileName", "")
-                if not url or not _is_wanted_file(fname, kinds):
+                if not url or not wanted(fname):
                     continue
+                product_dir.mkdir(parents=True, exist_ok=True)
                 dest = product_dir / fname
                 _download_file(
                     url, dest, on_progress=on_progress, cancel_check=cancel_check
@@ -384,12 +446,47 @@ def download_scene(
 
             products_done += 1
             if max_products and products_done >= max_products:
-                return downloaded
+                return downloaded, product_ids
 
         if len(products) < limit:
             break
         offset += limit
 
+    return downloaded, product_ids
+
+
+def download_scene(
+    *,
+    pdsid: str | None = None,
+    bbox: tuple[float, float, float, float] | None = None,
+    out_dir: Path,
+    limit: int = 100,
+    max_products: int | None = None,
+    on_progress: ProgressCallback | None = None,
+    cancel_check: CancelCheck | None = None,
+    data: DataSelection | Iterable[str] = "sr",
+    product: str = "mtrdr",
+) -> list[Path]:
+    """Descarga SR y/o IF de un solo tipo de producto: MTRDR o TER."""
+    kinds = parse_data_selection(data)
+    kind = parse_product(product)
+    if kind == "ter":
+        wanted = lambda name: _is_ter_image(name, kinds)
+        pt = "TER"
+    else:
+        wanted = lambda name: _is_wanted_file(name, kinds)
+        pt = None
+    downloaded, _product_ids = _download_catalog(
+        pdsid=_query_pdsid(pdsid, kind),
+        bbox=bbox,
+        out_dir=out_dir,
+        limit=limit,
+        max_products=max_products,
+        on_progress=on_progress,
+        cancel_check=cancel_check,
+        pt=pt,
+        wanted=wanted,
+    )
     return downloaded
 
 
@@ -401,10 +498,12 @@ def download_batch(
     on_progress: ProgressCallback | None = None,
     cancel_check: CancelCheck | None = None,
     data: DataSelection | Iterable[str] = "sr",
+    product: str = "mtrdr",
 ) -> list[Path]:
     """Descarga SR y/o IF para una lista explícita de Product IDs."""
     kinds = parse_data_selection(data)
-    label = "+".join(sorted(kinds)).upper()
+    kind = parse_product(product)
+    label = f"{kind.upper()} {'+'.join(sorted(kinds)).upper()}"
     ids = product_ids[:max_products] if max_products else product_ids
     all_files: list[Path] = []
     n = len(ids)
@@ -428,6 +527,7 @@ def download_batch(
             on_progress=_file_progress if on_progress else None,
             cancel_check=cancel_check,
             data=kinds,
+            product=kind,
         )
         all_files.extend(files)
         if on_progress:
